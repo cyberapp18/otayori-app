@@ -1,2 +1,0 @@
-# otayori-app
-otayoripon app
