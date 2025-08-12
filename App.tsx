@@ -1,4 +1,3 @@
-
 import React, { useState, createContext, useContext, useEffect } from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import DashboardPage from './pages/DashboardPage';
@@ -10,11 +9,14 @@ import SignUpPage from './pages/SignUpPage';
 import EmailVerificationPage from './pages/EmailVerificationPage';
 import TermsPage from './pages/TermsPage';
 import PrivacyPolicyPage from './pages/PrivacyPolicyPage';
+import LandingPage from './pages/LandingPage'; // LandingPageをインポート
 import Header from './components/Header';
 import { Notice, Task, NewsletterAction, User, Child } from './types';
 import * as authService from './services/authService';
 import * as settingsService from './services/settingsService';
 import * as familyService from './services/familyService';
+import { getAuth, onAuthStateChanged } from 'firebase/auth'; // Firebase Authをインポート
+import { getApp } from 'firebase/app'; // Firebase Appをインポート
 
 interface AppContextType {
   notices: Notice[];
@@ -51,33 +53,49 @@ export const useAppContext = () => {
 const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [notices, setNotices] = useState<Notice[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [isAuthenticated, setIsAuthenticated] = useState(authService.isAuthenticated());
-  const [user, setUser] = useState<User | null>(authService.getCurrentUser());
+  // Firebase Authの状態に応じて初期値を設定
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
   const [imageRetention, setImageRetention] = useState<boolean>(settingsService.getImageRetention());
   const [familyChildren, setFamilyChildren] = useState<Child[]>([]);
+  // ロード中の状態を管理するための新しいstate
+  const [loadingAuth, setLoadingAuth] = useState(true);
+
+  // Firebase Authのインスタンスを取得
+  const auth = getAuth(getApp());
 
   useEffect(() => {
-    const handleAuthChange = () => {
-      const authStatus = authService.isAuthenticated();
-      setIsAuthenticated(authStatus);
-      setUser(authService.getCurrentUser());
-
-      if (authStatus) {
-        setFamilyChildren(familyService.getChildren());
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser) {
+        // ログイン済みの場合
+        // NOTE: ここでFirestoreからユーザーの追加プロフィール（birthdate, country, location）をロードする必要があります
+        // 現状ではFirebase AuthのUserオブジェクトから直接取得できる情報のみを使用
+        const currentUser: User = {
+          uid: firebaseUser.uid,
+          email: firebaseUser.email || '',
+          username: firebaseUser.displayName || firebaseUser.email || '',
+          birthdate: '', // Firestoreから取得
+          country: '',   // Firestoreから取得
+          location: '',  // Firestoreから取得
+        };
+        setUser(currentUser);
+        setIsAuthenticated(true);
+        // 認証後のデータロード（家族情報、おたより、タスクなど）
+        // 例: setFamilyChildren(await familyService.getFamilyChildren(currentUser.uid));
       } else {
-        // Clear data on logout
+        // ログアウト済みの場合
+        setUser(null);
+        setIsAuthenticated(false);
+        // データのクリア
         setNotices([]);
         setTasks([]);
         setFamilyChildren([]);
       }
-    };
+      setLoadingAuth(false); // 認証状態のロードが完了
+    });
 
-    handleAuthChange(); // Initial load
-    window.addEventListener('storage', handleAuthChange);
-    return () => {
-      window.removeEventListener('storage', handleAuthChange);
-    };
-  }, []);
+    return () => unsubscribe();
+  }, [auth]);
 
   const toggleImageRetention = () => {
     const newValue = !imageRetention;
@@ -87,24 +105,23 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
   const login = async (email: string, password: string) => {
     await authService.login(email, password);
-    setNotices([]);
-    setTasks([]);
-    setIsAuthenticated(true);
-    setUser(authService.getCurrentUser());
-    setFamilyChildren(familyService.getChildren());
+    // onAuthStateChangedリスナーが状態を更新するため、ここでは直接setIsAuthenticatedなどは呼び出さない
+    // setNotices([]); // ログイン後のデータロードはonAuthStateChangedで行うか、別途関数で管理
+    // setTasks([]);
+    // setFamilyChildren([]);
   };
 
   const logout = () => {
     authService.logout();
-    setIsAuthenticated(false);
-    setUser(null);
-    setNotices([]);
-    setTasks([]);
-    setFamilyChildren([]);
+    // onAuthStateChangedリスナーが状態を更新するため、ここでは直接setIsAuthenticatedなどは呼び出さない
+    // setNotices([]); // ログアウト後のデータクリアはonAuthStateChangedで行う
+    // setTasks([]);
+    // setFamilyChildren([]);
   };
 
   const signup = async (newUser: User, password: string) => {
     await authService.signup(newUser, password);
+    // onAuthStateChangedリスナーが状態を更新するため、ここでは直接setIsAuthenticatedなどは呼び出さない
   };
 
   const addNotice = (notice: Notice) => {
@@ -224,14 +241,31 @@ const MainLayout = () => (
 
 
 function App() {
+  const { isAuthenticated, loadingAuth } = useAppContext(); // loadingAuthも取得
+
+  // 認証状態のロード中
+  if (loadingAuth) {
+    return <div className="flex justify-center items-center min-h-screen text-xl">Loading authentication...</div>;
+  }
+
   return (
     <AppProvider>
       <HashRouter>
         <Routes>
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="/signup" element={<SignUpPage />} />
-            <Route path="/verify-email" element={<EmailVerificationPage />} />
+          {/* 認証されていない場合はLandingPageを表示し、ログイン/サインアップへ */}
+          {!isAuthenticated ? (
+            <>
+              <Route path="/" element={<LandingPage />} /> {/* ルートパスをLandingPageに */}
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="/signup" element={<SignUpPage />} />
+              <Route path="/verify-email" element={<EmailVerificationPage />} />
+              {/* 未認証ユーザーが認証が必要なパスにアクセスしようとした場合、LandingPageへリダイレクト */}
+              <Route path="/*" element={<Navigate to="/" replace />} />
+            </>
+          ) : (
+            // 認証されている場合はMainLayoutを表示
             <Route path="/*" element={<MainLayout />} />
+          )}
         </Routes>
       </HashRouter>
     </AppProvider>
