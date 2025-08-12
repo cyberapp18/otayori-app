@@ -1,0 +1,33 @@
+# Node modules
+node_modules/
+functions/node_modules/
+
+# Build output
+dist/
+.vite/
+functions/lib/ # If TypeScript is compiled to JavaScript in functions
+
+# Environment variables
+.env
+.env.local
+.env.*.local # For multiple environment files
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+firebase-debug.log
+firebase-*.log
+
+# Editor/IDE specific
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Other
+coverage/

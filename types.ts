@@ -95,6 +95,7 @@ export interface Family {
 }
 
 export interface User {
+  uid: string; // 追加: Firebase AuthのUID
   username: string;
   email: string;
   birthdate: string;
