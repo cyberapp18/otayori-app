@@ -240,42 +240,48 @@ const MainLayout = () => (
 );
 
 
-function App() {
-  const { isAuthenticated, loadingAuth } = useAppContext(); // loadingAuthも取得
+// App.tsx の function App() 部分を以下のように変更
 
-  // 認証状態のロード中
+function App() {
+  const { isAuthenticated, loadingAuth } = useAppContext();
+
   if (loadingAuth) {
     return <div className="flex justify-center items-center min-h-screen text-xl">Loading authentication...</div>;
   }
 
   return (
     <HashRouter>
-      <Routes>
-        {/* 未認証ユーザーでもアクセス可能なパス */}
-        <Route path="/" element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <LandingPage />} />
-        <Route path="/upload" element={<UploadPage />} />
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/signup" element={<SignUpPage />} />
-        <Route path="/verify-email" element={<EmailVerificationPage />} />
-        <Route path="/pricing" element={<div>Pricing Page</div>} />
-        <Route path="/account" element={<div>Account Page</div>} />
-        <Route path="/success" element={<div>Success Page</div>} />
-        <Route path="/cancel" element={<div>Cancel Page</div>} />
+      <div className="min-h-screen bg-orange-50 text-gray-800">
+        <Header />
+        <main className="p-4 pb-24 sm:p-6 sm:pb-24 md:p-6 lg:p-8 max-w-4xl mx-auto">
+          <Routes>
+            {/* 未認証ユーザーでもアクセス可能なパス */}
+            <Route path="/" element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <LandingPage />} />
+            <Route path="/upload" element={<UploadPage />} />
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/signup" element={<SignUpPage />} />
+            <Route path="/verify-email" element={<EmailVerificationPage />} />
+            <Route path="/pricing" element={<div>Pricing Page</div>} />
+            <Route path="/account" element={<div>Account Page</div>} />
+            <Route path="/success" element={<div>Success Page</div>} />
+            <Route path="/cancel" element={<div>Cancel Page</div>} />
 
-        {/* 認証済みユーザーのみアクセス可能なパス */}
-        {isAuthenticated ? (
-          <>
-            <Route path="/dashboard" element={<DashboardPage />} />
-            <Route path="/notice/:id" element={<NoticeDetailPage />} />
-            <Route path="/settings" element={<SettingsPage />} />
-            <Route path="/terms" element={<TermsPage />} />
-            <Route path="/privacy" element={<PrivacyPolicyPage />} />
-            <Route path="*" element={<Navigate to="/dashboard" replace />} />
-          </>
-        ) : (
-          <Route path="*" element={<Navigate to="/" replace />} />
-        )}
-      </Routes>
+            {/* 認証済みユーザーのみアクセス可能なパス */}
+            {isAuthenticated ? (
+              <>
+                <Route path="/dashboard" element={<DashboardPage />} />
+                <Route path="/notice/:id" element={<NoticeDetailPage />} />
+                <Route path="/settings" element={<SettingsPage />} />
+                <Route path="/terms" element={<TermsPage />} />
+                <Route path="/privacy" element={<PrivacyPolicyPage />} />
+                <Route path="*" element={<Navigate to="/dashboard" replace />} />
+              </>
+            ) : (
+              <Route path="*" element={<Navigate to="/" replace />} />
+            )}
+          </Routes>
+        </main>
+      </div>
     </HashRouter>
   );
 }
