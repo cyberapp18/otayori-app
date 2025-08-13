@@ -1,62 +1,64 @@
 const functions = require("firebase-functions");
-const { GoogleGenerativeAI, Type } = require("@google/generative-ai"); // GoogleGenerativeAI と Type を直接インポート
+const { onCall } = require("firebase-functions/v2/https");
+const { GoogleGenerativeAI, SchemaType } = require("@google/generative-ai");
+
 
 const CLASS_NEWSLETTER_SCHEMA = {
-  type: Type.OBJECT,
+  type: SchemaType.OBJECT,
   properties: {
     header: {
-      type: Type.OBJECT,
+      type: SchemaType.OBJECT,
       properties: {
-        title: { type: Type.STRING, description: "クラスだよりのタイトル（例: 7月号クラスだより）", nullable: true },
-        class_name: { type: Type.STRING, description: "クラス名（例: うさぎ組）", nullable: true },
-        school_name: { type: Type.STRING, description: "学校名・園名", nullable: true },
-        issue_month: { type: Type.STRING, description: "発行月 (YYYY-MM)", nullable: true },
-        issue_date: { type: Type.STRING, description: "発行日 (YYYY-MM-DD)", nullable: true },
+        title: { type: SchemaType.STRING, description: "クラスだよりのタイトル（例: 7月号クラスだより）", nullable: true },
+        class_name: { type: SchemaType.STRING, description: "クラス名（例: うさぎ組）", nullable: true },
+        school_name: { type: SchemaType.STRING, description: "学校名・園名", nullable: true },
+        issue_month: { type: SchemaType.STRING, description: "発行月 (YYYY-MM)", nullable: true },
+        issue_date: { type: SchemaType.STRING, description: "発行日 (YYYY-MM-DD)", nullable: true },
       },
       required: ["title", "class_name", "school_name", "issue_month", "issue_date"],
     },
-    overview: { type: Type.STRING, description: "おたより全体の150字以内の日本語要約。結論を先に書く。" },
+    overview: { type: SchemaType.STRING, description: "おたより全体の150字以内の日本語要約。結論を先に書く。" },
     key_points: {
-      type: Type.ARRAY,
+      type: SchemaType.ARRAY,
       description: "保護者が把握すべき3〜6個の箇条書き要点。行動に関する語（準備/提出/持参/確認）を優先する。",
-      items: { type: Type.STRING },
+      items: { type: SchemaType.STRING },
     },
     actions: {
-      type: Type.ARRAY,
+      type: SchemaType.ARRAY,
       description: "保護者による具体的な行動が必要な項目（イベントやTODO）のリスト。",
       items: {
-        type: Type.OBJECT,
+        type: SchemaType.OBJECT,
         properties: {
-          type: { type: Type.STRING, enum: ["event", "todo"], description: "項目の種類" }, // 正しい構文
-          event_name: { type: Type.STRING, description: "イベントやTODOの名称" },
+          type: { type: SchemaType.STRING, enum: ["event", "todo"], description: "項目の種類" }, // 正しい構文
+          event_name: { type: SchemaType.STRING, description: "イベントやTODOの名称" },
           is_continuation: {
-            type: Type.BOOLEAN,
+            type: SchemaType.BOOLEAN,
             description: "以前から継続している依頼事項かどうか。本文に「継続」「引き続き」「再掲」などの文言がある場合にtrueにする。",
             nullable: true,
           },
-          event_date: { type: Type.STRING, description: "イベント開催日 (YYYY-MM-DD)", nullable: true },
-          due_date: { type: Type.STRING, description: "提出物や支払いの締切日 (YYYY-MM-DD)", nullable: true },
-          items: { type: Type.ARRAY, items: { type: Type.STRING }, description: "持ち物や提出物のリスト" },
-          fee: { type: Type.STRING, description: "必要な費用", nullable: true },
+          event_date: { type: SchemaType.STRING, description: "イベント開催日 (YYYY-MM-DD)", nullable: true },
+          due_date: { type: SchemaType.STRING, description: "提出物や支払いの締切日 (YYYY-MM-DD)", nullable: true },
+          items: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING }, description: "持ち物や提出物のリスト" },
+          fee: { type: SchemaType.STRING, description: "必要な費用", nullable: true },
           repeat_rule: {
-            type: Type.OBJECT,
+            type: SchemaType.OBJECT,
             nullable: true,
             properties: {
-              byDay: { type: Type.ARRAY, items: { type: Type.STRING }, description: "曜日 (MO, TU, WE, TH, FR, SA, SU)" },
-              time: { type: Type.STRING, description: "時間 (HH:mm)" },
+              byDay: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING }, description: "曜日 (MO, TU, WE, TH, FR, SA, SU)" },
+              time: { type: SchemaType.STRING, description: "時間 (HH:mm)" },
             },
             required: ["byDay", "time"],
           },
-          audience: { type: Type.STRING, description: "対象者（例: 1年1組, 全園児）", nullable: true },
-          importance: { type: Type.STRING, enum: ["high", "medium", "low"], description: "重要度" },
-          action_required: { type: Type.BOOLEAN, description: "常時true" },
-          notes: { type: Type.STRING, description: "補足事項（例: 要確認）", nullable: true },
+          audience: { type: SchemaType.STRING, description: "対象者（例: 1年1組, 全園児）", nullable: true },
+          importance: { type: SchemaType.STRING, enum: ["high", "medium", "low"], description: "重要度" },
+          action_required: { type: SchemaType.BOOLEAN, description: "常時true" },
+          notes: { type: SchemaType.STRING, description: "補足事項（例: 要確認）", nullable: true },
           confidence: {
-            type: Type.OBJECT,
+            type: SchemaType.OBJECT,
             properties: {
-              date: { type: Type.NUMBER, description: "event_dateの信頼度 (0-1)" },
-              due: { type: Type.NUMBER, description: "due_dateの信頼度 (0-1)" },
-              items: { type: Type.NUMBER, description: "itemsの信頼度 (0-1)" },
+              date: { type: SchemaType.NUMBER, description: "event_dateの信頼度 (0-1)" },
+              due: { type: SchemaType.NUMBER, description: "due_dateの信頼度 (0-1)" },
+              items: { type: SchemaType.NUMBER, description: "itemsの信頼度 (0-1)" },
             },
             required: ["date", "due", "items"],
           },
@@ -65,14 +67,14 @@ const CLASS_NEWSLETTER_SCHEMA = {
       },
     },
     infos: {
-      type: Type.ARRAY,
+      type: SchemaType.ARRAY,
       description: "通知不要だが参考になる情報のリスト。",
       items: {
-        type: Type.OBJECT,
+        type: SchemaType.OBJECT,
         properties: {
-          title: { type: Type.STRING, description: "情報項目の見出し" },
-          summary: { type: Type.STRING, description: "80字以内の要約" },
-          audience: { type: Type.STRING, description: "関連する対象者", nullable: true },
+          title: { type: SchemaType.STRING, description: "情報項目の見出し" },
+          summary: { type: SchemaType.STRING, description: "80字以内の要約" },
+          audience: { type: SchemaType.STRING, description: "関連する対象者", nullable: true },
         },
         required: ["title", "summary", "audience"],
       },
@@ -81,57 +83,72 @@ const CLASS_NEWSLETTER_SCHEMA = {
   required: ["header", "overview", "key_points", "actions", "infos"],
 };
 
+// CLASS_NEWSLETTER_SCHEMA はそのまま
 
-exports.callGeminiApi = functions.https.onCall(async (data, context) => {
-  if (!context.auth) {
-    throw new functions.https.HttpsError(
-      "unauthenticated",
-      "The function must be called while authenticated.",
-    );
-  }
+exports.callGeminiApi = onCall(
+  {
+    secrets: ["GEMINI_API_KEY"],
+    timeoutSeconds: 540,
+    memory: "1GiB", // "1GB" → "1GiB"
+    region: "us-central1", // リージョン指定
+  },
+  async (request) => {
+    // context.auth → request.auth に変更
+    if (!request.auth) {
+      throw new functions.https.HttpsError(
+        "unauthenticated",
+        "The function must be called while authenticated.",
+      );
+    }
 
-  const config = functions.config().gemini;
-  const API_KEY = config && config.api_key ? config.api_key : null;
+    // data → request.data に変更
+    const prompt = request.data.prompt;
 
-  if (!API_KEY) {
-    console.error("Gemini API key is not set in Firebase Functions config.");
-    throw new functions.https.HttpsError(
-      "unavailable",
-      "Gemini API is not configured. Please ensure API key is set.",
-    );
-  }
+    if (!prompt) {
+      throw new functions.https.HttpsError(
+        "invalid-argument",
+        "Prompt is required.",
+      );
+    }
 
-  const genAI = new GoogleGenerativeAI(API_KEY);
-  const prompt = data.prompt;
+    const API_KEY = process.env.GEMINI_API_KEY;
 
-  if (!prompt) {
-    throw new functions.https.HttpsError(
-      "invalid-argument",
-      "Prompt is required.",
-    );
-  }
+    if (!API_KEY) {
+      console.error("Gemini API key is not set in environment variables.");
+      throw new functions.https.HttpsError(
+        "unavailable",
+        "Gemini API is not configured.",
+      );
+    }
 
-  try {
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-    console.log("Prompt being sent to Gemini:", prompt);
+    const genAI = new GoogleGenerativeAI(API_KEY);
 
-    const result = await model.generateContent({
-      contents: prompt,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: CLASS_NEWSLETTER_SCHEMA,
-      },
-    });
-    const response = await result.response;
-    console.log("Raw response from Gemini:", response);
-    const jsonResponse = await response.json();
+    try {
+      const model = genAI.getGenerativeModel({
+        model: "gemini-1.5-pro",
+        generationConfig: {
+          responseMimeType: "application/json",
+          responseSchema: CLASS_NEWSLETTER_SCHEMA,
+        },
+      });
 
-    return { result: JSON.stringify(jsonResponse) };
-  } catch (error) {
-    console.error("Error calling Gemini API:", error);
-    throw new functions.https.HttpsError(
-      "internal",
-      "Failed to call Gemini API.",
-    );
-  }
-});
+      console.log("Prompt being sent to Gemini:", prompt);
+
+      const result = await model.generateContent(prompt);
+      const response = result.response;
+      console.log("Raw response from Gemini:", response);
+
+      const text = response.text();
+      const jsonResponse = JSON.parse(text);
+
+      return { result: jsonResponse };
+    } catch (error) {
+      console.error("Error calling Gemini API:", error);
+      console.error("Error details:", error.message, error.stack);
+      throw new functions.https.HttpsError(
+        "internal",
+        `Failed to call Gemini API: ${error.message}`,
+      );
+    }
+  },
+);
