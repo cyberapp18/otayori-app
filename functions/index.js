@@ -89,11 +89,13 @@ exports.callGeminiApi = onCall(
   {
     secrets: ["GEMINI_API_KEY"],
     timeoutSeconds: 540,
-    memory: "1GiB", // "1GB" → "1GiB"
-    region: "us-central1", // リージョン指定
+    memory: "1GiB",
+    region: "us-central1",
+    cors: true, // CORS を有効化
   },
   async (request) => {
-    // context.auth → request.auth に変更
+    console.log("Function called with auth:", !!request.auth);
+
     if (!request.auth) {
       throw new functions.https.HttpsError(
         "unauthenticated",
@@ -101,7 +103,6 @@ exports.callGeminiApi = onCall(
       );
     }
 
-    // data → request.data に変更
     const prompt = request.data.prompt;
 
     if (!prompt) {
@@ -132,19 +133,18 @@ exports.callGeminiApi = onCall(
         },
       });
 
-      console.log("Prompt being sent to Gemini:", prompt);
+      console.log("Prompt being sent to Gemini:", prompt.substring(0, 100) + "...");
 
       const result = await model.generateContent(prompt);
       const response = result.response;
-      console.log("Raw response from Gemini:", response);
 
       const text = response.text();
       const jsonResponse = JSON.parse(text);
 
+      console.log("Successfully processed request");
       return { result: jsonResponse };
     } catch (error) {
       console.error("Error calling Gemini API:", error);
-      console.error("Error details:", error.message, error.stack);
       throw new functions.https.HttpsError(
         "internal",
         `Failed to call Gemini API: ${error.message}`,
