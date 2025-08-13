@@ -253,24 +253,26 @@ function App() {
       <Routes>
         {/* 未認証ユーザーでもアクセス可能なパス */}
         <Route path="/" element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <LandingPage />} />
-        <Route path="/upload" element={<UploadPage />} /> {/* 未認証でもアクセス可能に */}
+        <Route path="/upload" element={<UploadPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignUpPage />} />
         <Route path="/verify-email" element={<EmailVerificationPage />} />
+        <Route path="/pricing" element={<div>Pricing Page</div>} />
+        <Route path="/account" element={<div>Account Page</div>} />
+        <Route path="/success" element={<div>Success Page</div>} />
+        <Route path="/cancel" element={<div>Cancel Page</div>} />
 
         {/* 認証済みユーザーのみアクセス可能なパス */}
         {isAuthenticated ? (
           <>
-            <Route path="/dashboard" element={<DashboardPage />} /> {/* /をDashboardにリダイレクトするため、専用のパスにする */}
+            <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/notice/:id" element={<NoticeDetailPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/terms" element={<TermsPage />} />
             <Route path="/privacy" element={<PrivacyPolicyPage />} />
-            {/* 認証済みユーザーが未定義のパスにアクセスした場合、DashboardPageへリダイレクト */}
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </>
         ) : (
-          // 未認証ユーザーが認証済みユーザー専用パスにアクセスしようとした場合、LandingPageへリダイレクト
           <Route path="*" element={<Navigate to="/" replace />} />
         )}
       </Routes>

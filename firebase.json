@@ -14,5 +14,19 @@
         "npm --prefix \"$RESOURCE_DIR\" run lint"
       ]
     }
-  ]
+  ],
+  "firestore": {
+    "database": "(default)",
+    "location": "asia-northeast1",
+    "rules": "firestore.rules",
+          "hosting": {
+            "public": "dist",
+            "ignore": ["**/.*", "**/node_modules/**"],
+            "rewrites": [
+              { "source": "**", "destination": "/index.html" }
+            ]
+          },
+    ]
+  },
+  "extensions": {}
 }
