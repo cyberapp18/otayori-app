@@ -1,8 +1,6 @@
 const functions = require("firebase-functions");
-const generativeAi = require("@google/generative-ai");
-
-const GoogleGenerativeAI = generativeAi.GoogleGenerativeAI;
-const Type = generativeAi.Type;
+const { GoogleGenerativeAI } = require("@google/generative-ai"); // GoogleGenerativeAIのみを分割代入
+const { Type } = require("@google/generative-ai"); // Typeは別途インポート
 
 const CLASS_NEWSLETTER_SCHEMA = {
   type: Type.OBJECT,
