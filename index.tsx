@@ -1,7 +1,9 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
-import { initializeApp } from 'firebase/app'; // 追加
+import { initializeApp } from 'firebase/app';
+// AppProviderをインポート
+import { AppProvider } from './App'; // AppProviderをApp.tsxからエクスポートしていると仮定
 
 // Firebaseの設定を環境変数から取得
 const firebaseConfig = {
@@ -17,7 +19,6 @@ const firebaseConfig = {
 // Firebaseアプリを初期化
 const app = initializeApp(firebaseConfig);
 
-// デバッグ用に初期化されたアプリを確認
 console.log("Firebase App initialized:", app.name);
 
 const rootElement = document.getElementById('root');
@@ -28,6 +29,9 @@ if (!rootElement) {
 const root = ReactDOM.createRoot(rootElement);
 root.render(
   <React.StrictMode>
-    <App />
+    {/* AppProviderでAppコンポーネントをラップする */}
+    <AppProvider>
+      <App />
+    </AppProvider>
   </React.StrictMode>
 );

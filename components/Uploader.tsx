@@ -1,4 +1,3 @@
-
 import React, { useRef, useState, useEffect } from 'react';
 import { CameraIcon, FileIcon, UploadIcon } from './Icon';
 
@@ -54,9 +53,10 @@ const Uploader: React.FC<UploaderProps> = ({ onFileSelect }) => {
             video: { facingMode: 'environment' }
         });
         setStream(newStream); // This will trigger the useEffect to attach the stream
-    } catch (err) {
+    } catch (err: any) { // errをany型として扱う
         console.error("Camera access error:", err);
-        setCameraError("カメラを起動できませんでした。ブラウザの設定でカメラへのアクセスが許可されているか確認してください。");
+        // エラーのnameとmessageを表示
+        setCameraError(`カメラを起動できませんでした。エラー: ${err.name || '不明なエラー'} - ${err.message || '詳細不明'}`);
         setIsCameraOpen(false);
     }
   };

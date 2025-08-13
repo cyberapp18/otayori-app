@@ -1,27 +1,26 @@
 import { User } from '../types';
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, User as FirebaseAuthUser } from 'firebase/auth';
-import { getFirestore, doc, setDoc } from 'firebase/firestore'; // 追加
+import { getFirestore, doc, setDoc } from 'firebase/firestore';
 import { getApp } from 'firebase/app';
 
-// Firebase Authインスタンスを取得
-const auth = getAuth(getApp());
-// Firestoreインスタンスを取得
-const db = getFirestore(getApp()); // 追加
+// Firebase Authインスタンスの取得を各関数の内部に移動
+// Firestoreインスタンスの取得も各関数の内部に移動
 
 export const signup = async (user: User, password: string): Promise<void> => {
   try {
+    const auth = getAuth(getApp()); // 関数が呼び出されたときに取得
+    const db = getFirestore(getApp()); // 関数が呼び出されたときに取得
+
     const userCredential = await createUserWithEmailAndPassword(auth, user.email, password);
     const firebaseUser = userCredential.user;
 
-    // Firestoreにユーザープロフィールを保存
-    // `uid`をドキュメントIDとして使用し、`User`型から`uid`を除いたデータを保存
     await setDoc(doc(db, 'users', firebaseUser.uid), {
       username: user.username,
       email: user.email,
       birthdate: user.birthdate,
       country: user.country,
       location: user.location,
-      createdAt: new Date().toISOString(), // ユーザー作成日時を追加
+      createdAt: new Date().toISOString(),
     });
 
     console.log("User signed up successfully and profile saved to Firestore:", firebaseUser.email);
@@ -38,6 +37,7 @@ export const signup = async (user: User, password: string): Promise<void> => {
 
 export const login = async (email: string, password: string): Promise<void> => {
   try {
+    const auth = getAuth(getApp()); // 関数が呼び出されたときに取得
     await signInWithEmailAndPassword(auth, email, password);
     console.log("User logged in successfully:", email);
   } catch (error: any) {
@@ -51,6 +51,7 @@ export const login = async (email: string, password: string): Promise<void> => {
 
 export const logout = async (): Promise<void> => {
   try {
+    const auth = getAuth(getApp()); // 関数が呼び出されたときに取得
     await signOut(auth);
     console.log("User logged out successfully.");
   } catch (error) {
@@ -59,23 +60,37 @@ export const logout = async (): Promise<void> => {
   }
 };
 
+// NOTE: これらの関数は同期的に認証状態を返しますが、
+// onAuthStateChangedを使用するApp.tsxのロジックを考慮すると、
+// 厳密にはこれらの関数はほとんど使われなくなる可能性があります。
+// しかし、後方互換性のため残しておきます。
 export const isAuthenticated = (): boolean => {
-  return auth.currentUser !== null;
+  try {
+    const auth = getAuth(getApp()); // 関数が呼び出されたときに取得
+    return auth.currentUser !== null;
+  } catch (error) {
+    // Firebaseアプリがまだ初期化されていない場合など
+    console.warn("Firebase App not yet initialized when calling isAuthenticated.", error);
+    return false;
+  }
 };
 
 export const getCurrentUser = (): User | null => {
-  const firebaseUser = auth.currentUser;
-  if (firebaseUser) {
-    return {
-      uid: firebaseUser.uid,
-      email: firebaseUser.email || '',
-      username: firebaseUser.displayName || firebaseUser.email || '',
-      // Firestoreから追加情報を取得する場合は、ここで非同期処理が必要になります
-      // 現状ではFirebase AuthのUserオブジェクトから直接マッピングできる情報のみ
-      birthdate: '', // 仮の値、Firestoreから取得する必要がある
-      country: '',   // 仮の値、Firestoreから取得する必要がある
-      location: '',  // 仮の値、Firestoreから取得する必要がある
-    };
+  try {
+    const auth = getAuth(getApp()); // 関数が呼び出されたときに取得
+    const firebaseUser = auth.currentUser;
+    if (firebaseUser) {
+      return {
+        uid: firebaseUser.uid,
+        email: firebaseUser.email || '',
+        username: firebaseUser.displayName || firebaseUser.email || '',
+        birthdate: '',
+        country: '',
+        location: '',
+      };
+    }
+  } catch (error) {
+    console.warn("Firebase App not yet initialized when calling getCurrentUser.", error);
   }
   return null;
 };

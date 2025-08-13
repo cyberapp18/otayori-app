@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Link } from 'react-router-dom';
 
@@ -22,7 +21,7 @@ const LandingPage: React.FC = () => {
       </div>
       <div className="mt-12">
         <Link
-          to="/signup"
+          to="/upload" // ここを /upload に変更
           className="inline-block px-10 py-4 bg-orange-500 text-white font-bold text-lg rounded-xl shadow-lg hover:bg-orange-600 transition-transform transform hover:scale-105"
         >
           無料で始める
