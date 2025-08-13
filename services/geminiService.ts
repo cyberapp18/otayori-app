@@ -1,51 +1,59 @@
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { ClassNewsletterSchema } from '../types';
 import { PROMPT_EXTRACT } from '../constants';
-// Firebase app を直接インポート
-import app from '../src/services/firebase'; // デフォルトエクスポートを使用
+import app from '../src/services/firebase';
+import { auth } from '../src/services/firebase'; // auth をインポート
 
 export const extractClassNewsletterData = async (rawText: string): Promise<ClassNewsletterSchema> => {
   try {
-    // Firebaseアプリインスタンスを明示的に渡す
-    const functions = getFunctions(app);
-    const callGeminiApi = httpsCallable(functions, 'callGeminiApi');
+    console.log("=== Gemini Service Start ===");
+    
+    // 認証チェック
+    if (!auth.currentUser) {
+      throw new Error("認証が必要です。ログインしてください。");
+    }
 
-    console.log("Calling Firebase Function with prompt length:", rawText.length);
+    console.log("User authenticated:", auth.currentUser.uid);
+    console.log("Raw text length:", rawText.length);
+    
+    // Callable 関数の呼び出し（リージョン明示）
+    const functions = getFunctions(app, "us-central1");
+    const callGeminiApi = httpsCallable(functions, "callGeminiApi");
+
+    console.log("Calling Firebase Callable Function...");
 
     const result = await callGeminiApi({
-      prompt: `${PROMPT_EXTRACT}\n\n本文：\n"""\n${rawText}\n"""`,
+      prompt: `${PROMPT_EXTRACT}\n\n本文：\n"""\n${rawText}\n"""`
     });
 
     console.log("Firebase Function result:", result);
 
-    // 修正: result.data.result の構造を確認
     const data = (result.data as any).result;
     
-    // データが既にオブジェクトの場合はそのまま返す
-    if (typeof data === 'object') {
-      return data as ClassNewsletterSchema;
+    if (!data || typeof data !== 'object') {
+      throw new Error("Firebase Functionから無効なデータが返されました");
     }
     
-    // 文字列の場合はJSONパース
-    if (typeof data === 'string') {
-      const parsedData = JSON.parse(data);
-      return parsedData as ClassNewsletterSchema;
-    }
-
-    throw new Error("Unexpected data format from Firebase Function");
+    return data as ClassNewsletterSchema;
 
   } catch (error) {
-    console.error("Error extracting newsletter data from Gemini via Firebase Function:", error);
-    console.error("Error details:", error);
+    console.error("=== Gemini Service Error ===");
+    console.error("Error:", error);
     
-    if (error instanceof Error && error.message.includes('JSON')) {
-      throw new Error("AIからの応答が不正な形式です。もう一度お試しください。");
-    }
-    
-    if (error && typeof error === 'object' && 'code' in error && 'message' in error) {
-      const errorCode = (error as any).code;
-      const errorMessage = (error as any).message;
-      throw new Error(`Firebase Function Error: ${errorCode} - ${errorMessage}`);
+    if (error && typeof error === 'object' && 'code' in error) {
+      const firebaseError = error as any;
+      switch (firebaseError.code) {
+        case 'functions/unauthenticated':
+          throw new Error("認証が必要です。ログインしてください。");
+        case 'functions/failed-precondition':
+          throw new Error("サーバーの設定に問題があります。管理者にお問い合わせください。");
+        case 'functions/invalid-argument':
+          throw new Error("入力データに問題があります。もう一度お試しください。");
+        case 'functions/internal':
+          throw new Error("サーバー内部でエラーが発生しました。しばらく待ってから再度お試しください。");
+        default:
+          throw new Error(`Firebase Function Error: ${firebaseError.message}`);
+      }
     }
     
     throw new Error("情報の抽出中にエラーが発生しました。");
