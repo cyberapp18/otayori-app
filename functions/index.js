@@ -15,10 +15,12 @@ exports.callGeminiApi = onCall(
     region: "us-central1",
   },
   async (request) => {
-    // 認証チェック
-    if (!request.auth) {
-      throw new HttpsError("unauthenticated", "認証が必要です");
-    }
+    // 認証チェックを削除（未ログインでもAI処理可能）
+    // if (!request.auth) {
+    //   throw new HttpsError("unauthenticated", "認証が必要です");
+    // }
+
+    console.log("Function called by:", request.auth ? request.auth.uid : "anonymous");
 
     // API キー取得
     const GEMINI_KEY = geminiApiKey.value();
