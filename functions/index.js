@@ -90,8 +90,13 @@ exports.callGeminiApi = onCall(
     secrets: ["GEMINI_API_KEY"],
     timeoutSeconds: 540,
     memory: "1GiB",
-    region: "us-central1",
-    cors: true, // CORS を有効化
+    cors: {
+      origin: [
+        "http://localhost:5173",
+        "https://otayori-app.web.app",
+      ],
+      methods: ["GET", "POST", "OPTIONS"],
+    },
   },
   async (request) => {
     console.log("Function called with auth:", !!request.auth);
