@@ -1,63 +1,62 @@
 const functions = require("firebase-functions");
-const { GoogleGenerativeAI } = require("@google/generative-ai"); // GoogleGenerativeAIのみを分割代入
-const { Type } = require("@google/generative-ai"); // Typeは別途インポート
+const gemini = require("@google/generative-ai"); // モジュール全体をインポート
 
 const CLASS_NEWSLETTER_SCHEMA = {
-  type: Type.OBJECT,
+  type: gemini.Type.OBJECT,
   properties: {
     header: {
-      type: Type.OBJECT,
+      type: gemini.Type.OBJECT,
       properties: {
-        title: { type: Type.STRING, description: "クラスだよりのタイトル（例: 7月号クラスだより）", nullable: true },
-        class_name: { type: Type.STRING, description: "クラス名（例: うさぎ組）", nullable: true },
-        school_name: { type: Type.STRING, description: "学校名・園名", nullable: true },
-        issue_month: { type: Type.STRING, description: "発行月 (YYYY-MM)", nullable: true },
-        issue_date: { type: Type.STRING, description: "発行日 (YYYY-MM-DD)", nullable: true },
+        title: { type: gemini.Type.STRING, description: "クラスだよりのタイトル（例: 7月号クラスだより）", nullable: true },
+        class_name: { type: gemini.Type.STRING, description: "クラス名（例: うさぎ組）", nullable: true },
+        school_name: { type: gemini.Type.STRING, description: "学校名・園名", nullable: true },
+        issue_month: { type: gemini.Type.STRING, description: "発行月 (YYYY-MM)", nullable: true },
+        issue_date: { type: gemini.Type.STRING, description: "発行日 (YYYY-MM-DD)", nullable: true },
       },
       required: ["title", "class_name", "school_name", "issue_month", "issue_date"],
     },
-    overview: { type: Type.STRING, description: "おたより全体の150字以内の日本語要約。結論を先に書く。" },
+    overview: { type: gemini.Type.STRING, description: "おたより全体の150字以内の日本語要約。結論を先に書く。" },
     key_points: {
-      type: Type.ARRAY,
+      type: gemini.Type.ARRAY,
       description: "保護者が把握すべき3〜6個の箇条書き要点。行動に関する語（準備/提出/持参/確認）を優先する。",
-      items: { type: Type.STRING },
+      items: { type: gemini.Type.STRING },
     },
     actions: {
-      type: Type.ARRAY,
+      type: gemini.Type.ARRAY,
       description: "保護者による具体的な行動が必要な項目（イベントやTODO）のリスト。",
       items: {
-        type: Type.OBJECT,
+        type: gemini.Type.OBJECT,
         properties: {
-          type: { type: Type.STRING, enum: ["event", "todo"], description: "項目の種類" },
-          event_name: { type: Type.STRING, description: "イベントやTODOの名称" },
+          type: { type: gemini.Type.STRING, enum: ["event", "todo"], description: "項目の種類" },
+          event_name: { type: gemini.Type.STRING, description: "イベントやTODOの名称" },
           is_continuation: {
-            type: Type.BOOLEAN,
+            type: gemini.Type.BOOLEAN,
             description: "以前から継続している依頼事項かどうか。本文に「継続」「引き続き」「再掲」などの文言がある場合にtrueにする。",
             nullable: true,
           },
-          event_date: { type: Type.STRING, description: "イベント開催日 (YYYY-MM-DD)", nullable: true },
-          due_date: { type: Type.STRING, description: "提出物や支払いの締切日 (YYYY-MM-DD)", nullable: true },
-          items: { type: Type.ARRAY, description: "持ち物や提出物のリスト", items: { type: Type.STRING } },
-          fee: { type: Type.STRING, description: "必要な費用", nullable: true },
+          event_date: { type: gemini.Type.STRING, description: "イベント開催日 (YYYY-MM-DD)", nullable: true },
+          due_date: { type: gemini.Type.STRING, description: "提出物や支払いの締切日 (YYYY-MM-DD)", nullable: true },
+          items: { type: gemini.Type.ARRAY, description: "持ち物や提出物のリスト", items: { type: gemini.Type.STRING } },
+          fee: { type: gemini.Type.STRING, description: "必要な費用", nullable: true },
           repeat_rule: {
-            type: Type.OBJECT,
+            type: gemini.Type.OBJECT,
             nullable: true,
             properties: {
-              byDay: { type: Type.ARRAY, items: { type: Type.STRING }, description: "曜日 (MO, TU, WE, TH, FR, SA, SU)" },
-              time: { type: Type.STRING, description: "時間 (HH:mm)" },
+              byDay: { type: gemini.Type.ARRAY, items: { type: gemini.Type.STRING }, description: "曜日 (MO, TU, WE, TH, FR, SA, SU)" },
+              time: { type: gemini.Type.STRING, description: "時間 (HH:mm)" },
             },
             required: ["byDay", "time"],
           },
-          audience: { type: Type.STRING, description: "対象者（例: 1年1組, 全園児）", nullable: true },
-          importance: { type: Type.STRING, enum: ["high", "medium", "low"], description: "重要度" },
-          action_required: { type: Type.BOOLEAN, description: "常時true" },
-          notes: { type: Type.STRING, description: "補足事項（例: 要確認）", nullable: true },
+          audience: { type: gemini.Type.STRING, description: "対象者（例: 1年1組, 全園児）", nullable: true },
+          importance: { type: gemini.Type.STRING, enum: ["high", "medium", "low"], description: "重要度" },
+          action_required: { type: gemini.Type.BOOLEAN, description: "常時true" },
+          notes: { type: gemini.Type.STRING, description: "補足事項（例: 要確認）", nullable: true },
           confidence: {
-            type: Type.OBJECT,
+            type: gemini.Type.OBJECT,
             properties: {
-              date: { type: Type.NUMBER, description: "event_dateの信頼度 (0-1)" },
-              due: { type: Type.NUMBER, description: "due_dateの信頼度 (0-1)" },
-              items: { type: Type.NUMBER, description: "itemsの信頼度 (0-1)" },
+              date: { type: gemini.Type.NUMBER, description: "event_dateの信頼度 (0-1)" },
+              due: { type: gemini.Type.NUMBER, description: "due_dateの信頼度 (0-1)" },
+              items: { type: gemini.Type.NUMBER, description: "itemsの信頼度 (0-1)" },
             },
             required: ["date", "due", "items"],
           },
@@ -66,14 +65,14 @@ const CLASS_NEWSLETTER_SCHEMA = {
       },
     },
     infos: {
-      type: Type.ARRAY,
+      type: gemini.Type.ARRAY,
       description: "通知不要だが参考になる情報のリスト。",
       items: {
-        type: Type.OBJECT,
+        type: gemini.Type.OBJECT,
         properties: {
-          title: { type: Type.STRING, description: "情報項目の見出し" },
-          summary: { type: Type.STRING, description: "80字以内の要約" },
-          audience: { type: Type.STRING, description: "関連する対象者", nullable: true },
+          title: { type: gemini.Type.STRING, description: "情報項目の見出し" },
+          summary: { type: gemini.Type.STRING, description: "80字以内の要約" },
+          audience: { type: gemini.Type.STRING, description: "関連する対象者", nullable: true },
         },
         required: ["title", "summary", "audience"],
       },
@@ -102,7 +101,7 @@ exports.callGeminiApi = functions.https.onCall(async (data, context) => {
     );
   }
 
-  const genAI = new GoogleGenerativeAI(API_KEY);
+  const genAI = new gemini.GoogleGenerativeAI(API_KEY); // gemini.GoogleGenerativeAI を使用
   const prompt = data.prompt;
 
   if (!prompt) {
