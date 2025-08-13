@@ -27,12 +27,11 @@ const CLASS_NEWSLETTER_SCHEMA = {
       items: {
         type: Type.OBJECT,
         properties: {
-          // 以下の行を修正
           type: { type: Type.STRING, enum: ["event", "todo"], description: "項目の種類" }, // 正しい構文
           event_name: { type: Type.STRING, description: "イベントやTODOの名称" },
           is_continuation: {
             type: Type.BOOLEAN,
-            description: "以前から継続している依頼事項かどうか。本文に「継続」「引き続き「再掲」などの文言がある場合にtrueにする。",
+            description: "以前から継続している依頼事項かどうか。本文に「継続」「引き続き」「再掲」などの文言がある場合にtrueにする。",
             nullable: true,
           },
           event_date: { type: Type.STRING, description: "イベント開催日 (YYYY-MM-DD)", nullable: true },
