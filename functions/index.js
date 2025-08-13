@@ -1,5 +1,8 @@
 const functions = require("firebase-functions");
-const { GoogleGenerativeAI, Type } = require("@google/generative-ai");
+const generativeAi = require("@google/generative-ai");
+
+const GoogleGenerativeAI = generativeAi.GoogleGenerativeAI;
+const Type = generativeAi.Type;
 
 const CLASS_NEWSLETTER_SCHEMA = {
   type: Type.OBJECT,
