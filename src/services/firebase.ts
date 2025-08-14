@@ -22,6 +22,8 @@ Object.entries(requiredEnvVars).forEach(([key, value]) => {
 
 const app = initializeApp(requiredEnvVars);
 
+console.log('projectId', import.meta.env.VITE_FIREBASE_PROJECT_ID);
+
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 export default app;
