@@ -162,6 +162,38 @@ function normalizeToLegacySchema(raw: any, rawText?: string): ClassNewsletterSch
     issue_month: d.header?.issue_month ?? (issueDate ? issueDate.slice(0, 7) : null),
     issue_date: issueDate,
   };
+
+  // ——— タイトル品質判定/補助 ———
+  function hasMonth(s?: string | null) {
+    if (!s) return false;
+    return /(?:\b|\D)([0-9１２３４５６７８９]{1,2})\s*月(?![曜])/.test(s);
+  }
+  function hasNewsletterWord(s?: string | null) {
+    if (!s) return false;
+    return /(だより|便り|お知らせ|通信|レター)/u.test(s);
+  }
+  function isTooGenericTitle(s?: string | null) {
+    if (!s) return true;
+    const t = s.trim();
+    // 「園だより」「学年だより」など月なしの汎用名は弱い
+    return (
+      t.length < 3 ||
+      (/^(園|学年|学級|クラス)?(だより|便り|お知らせ)$/u.test(t) && !hasMonth(t))
+    );
+  }
+
+  // OCR から月ヒントを取る（issue_month 等がない場合の保険）
+  function detectMonthFromText(rawText?: string) {
+    if (!rawText) return null;
+    const lines = rawText.split(/\r?\n/).slice(0, 20).join(" ");
+    const m = lines.match(/([0-9１２３４５６７８９]{1,2})\s*月/);
+    return m ? m[1].replace(/[^\d]/g, "") + "月" : null; // "4月" 等
+  }
+
+  // 先の collectRawTitleCandidates がある前提。なければ前回の実装を流用してください。
+
+
+
   // —— 汎用タイトル抽出ユーティリティ ——
 
   // 行の正規化（既存 cleanLine があればそれを使用してOK。無ければこのまま）
@@ -198,14 +230,23 @@ function normalizeToLegacySchema(raw: any, rawText?: string): ClassNewsletterSch
 
     const cands: string[] = [...lines];
 
-    // 短い連結（冒頭近辺のみ）
-    for (let i = 0; i < Math.min(lines.length - 1, 6); i++) {
+    // collectRawTitleCandidates 内の連結ロジックを強化
+    for (let i = 0; i < Math.min(lines.length - 1, 8); i++) {
       const a = lines[i], b = lines[i + 1];
-      if (a.length >= 2 && a.length <= 6 && b.length >= 2 && b.length <= 8) {
+      if (a.length <= 8 && b.length <= 10) {
         cands.push(cleanLine(a + b));
         cands.push(cleanLine(a + " " + b));
       }
+      // 2行飛ばしの合成（「4月」「園だより」が1行空くケース）
+      if (i + 2 < lines.length) {
+        const c = lines[i + 2];
+        if (a.length <= 4 && c.length <= 10) {
+          cands.push(cleanLine(a + c));
+          cands.push(cleanLine(a + " " + c));
+        }
+      }
     }
+
     return Array.from(new Set(cands)).filter(Boolean);
   }
 
@@ -269,11 +310,12 @@ function normalizeToLegacySchema(raw: any, rawText?: string): ClassNewsletterSch
   }
 
 
-  // ★ タイトルの強制補完（汎用版）
-  if (!header.title || jpRatio(header.title) < 0.6 || header.title.length < 3) {
-    const mHint = monthOnly(header.issue_month, header.issue_date); // 例: "7月"
+  // ★ タイトルの強制補完（汎用 & 既存より良ければ置換）
+  {
+    const mHint =
+      monthOnly(header.issue_month, header.issue_date) ||
+      detectMonthFromText(rawText); // OCRからも月を拾う
 
-    // OCR候補 + 既存値から派生した候補をまとめてスコアリング
     const rawCands = collectRawTitleCandidates(rawText);
     const extraCands = [
       header.title ?? "",
@@ -282,14 +324,29 @@ function normalizeToLegacySchema(raw: any, rawText?: string): ClassNewsletterSch
       mHint ? `${mHint} おたより` : "",
     ].filter(Boolean);
 
-    const chosen =
-      chooseTitleUniversal([...rawCands, ...extraCands], mHint) ||
-      (header.class_name && mHint ? `${mHint} ${header.class_name}だより` : null) ||
-      (header.class_name ? `${header.class_name}だより` : null) ||
-      (mHint ? `${mHint} おたより` : null);
+    const chosen = chooseTitleUniversal([...rawCands, ...extraCands], mHint);
 
-    header.title = cleanLine(chosen ?? "おたより");
+    const current = header.title;
+    const currentIsGeneric = isTooGenericTitle(current);
+    const currentHasMonth = hasMonth(current);
+    const chosenHasMonth = hasMonth(chosen);
+
+    // 置換ルール：
+    // 1) 既存が空 or 汎用なら chosen を採用
+    // 2) 既存に月がなく、chosen に月があるなら chosen を採用（←今回の主因を解決）
+    // 3) それ以外は既存を維持（ただし安全なフォールバックは維持）
+    if (!current || currentIsGeneric || (!currentHasMonth && chosenHasMonth)) {
+      header.title = cleanLine(chosen ??
+        (header.class_name && mHint ? `${mHint} ${header.class_name}だより` :
+        header.class_name ? `${header.class_name}だより` :
+        mHint ? `${mHint} おたより` : "おたより")
+      );
+    } else {
+      // 既存を使うが、最低限整形
+      header.title = cleanLine(current);
+    }
   }
+
 
 
 

@@ -11,6 +11,11 @@ import { extractClassNewsletterData } from '../services/geminiService';
 import { sanitize } from '../services/sanitization';
 import { ClassNewsletterSchema, Notice } from '../types';
 import { auth } from '@/services/firebase'; // ← 追加：保存時に uid を使う
+// pages/UploadPage.tsx（抜粋）
+import { normalizeToISODate } from "@/services/date";
+import type { Task } from "@/types";
+// 既存の addTask 相当の保存関数があればそれを利用
+import { addTask } from "@/services/taskService";
 
 enum UploadStep {
   SelectFile,
@@ -78,46 +83,56 @@ const UploadPage: React.FC = () => {
 
   const handleConfirm = async () => {
     if (!extractedData || !rawText) return;
-
     try {
       setIsSubmitting(true);
 
       if (!isAuthenticated) {
-        alert('AIによる分析が完了しました！\nログインすると、この情報を保存して家族と共有できます。');
-        navigate('/login?from=upload-demo');
+        alert("AIによる分析が完了しました！\nログインすると、この情報を保存して家族と共有できます。");
+        navigate("/login?from=upload-demo");
         return;
       }
 
-      const uid = auth.currentUser?.uid;
-      if (!uid) {
-        alert('セッションが切れました。再度ログインしてください。');
-        navigate('/login');
-        return;
-      }
-
-      const newNotice: Notice = {
-        id: `notice-${Date.now()}`,
-        familyId: uid,
+      // 1) Notice の保存（既存のまま）
+      const noticeId = `notice-${Date.now()}`;
+      const newNotice = {
+        id: noticeId,
+        familyId: user!.uid,
         rawText,
-        extractJson: extractedData,       // ClassNewsletterSchema そのまま保存
-        summary: extractedData.overview,  // ★ types.ts の意図どおり overview を使用
+        extractJson: extractedData,
+        summary: extractedData.overview,
         createdAt: new Date().toISOString(),
         seenBy: [],
         pinned: false,
         originalImage: imageRetention ? imageDataUrl : null,
         childIds: selectedChildIds,
       };
-
       addNotice(newNotice);
 
-      if (startTime) {
-        const sec = (Date.now() - startTime) / 1000;
-        console.log(`Magic Moment Achieved: ${sec.toFixed(2)} seconds`);
-      }
+      // 2) actions → tasks へ変換（★ここがポイント）
+      const tasks: Task[] = extractedData.actions.map((a, i) => ({
+        id: `task-${Date.now()}-${i}`,
+        familyId: user!.uid,
+        noticeId,
+        title: a.event_name,
+        dueAt: normalizeToISODate(
+          a.due_date || a.event_date || null,
+          extractedData.header?.issue_month || null
+        ),
+        assigneeCid: selectedChildIds[0] ?? "unassigned",
+        completed: false,
+        createdAt: new Date().toISOString(),
+        isContinuation: !!a.is_continuation,
+        repeatRule: a.repeat_rule ?? null,
+        notes: a.notes ?? undefined,
+        childIds: selectedChildIds,
+      }));
 
-      navigate('/dashboard');
+      // 3) 保存
+      await Promise.all(tasks.map(t => addTask(t)));
+
+      navigate("/dashboard");
     } catch (e) {
-      setError((e as Error).message || '保存中にエラーが発生しました');
+      setError((e as Error).message);
       setStep(UploadStep.Error);
     } finally {
       setIsSubmitting(false);
