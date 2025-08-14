@@ -1,61 +1,45 @@
-import { getFunctions, httpsCallable } from 'firebase/functions';
-import { ClassNewsletterSchema } from '../types';
-import { PROMPT_EXTRACT } from '../constants';
-import app from '../src/services/firebase';
-import { auth } from '../src/services/firebase'; // auth をインポート
+// services/geminiService.ts
+import { getFunctions, httpsCallable } from "firebase/functions";
+import { signInAnonymously } from "firebase/auth";
 
-export const extractClassNewsletterData = async (rawText: string): Promise<ClassNewsletterSchema> => {
-  try {
-    console.log("=== Gemini Service Start ===");
-    
-    // 認証チェック
-    if (!auth.currentUser) {
-      throw new Error("認証が必要です。ログインしてください。");
-    }
+// 既存の firebase 初期化（default と named を併用）
+import app, { auth } from "@/services/firebase";
 
-    console.log("User authenticated:", auth.currentUser.uid);
-    console.log("Raw text length:", rawText.length);
-    
-    // Callable 関数の呼び出し（リージョン明示）
-    const functions = getFunctions(app, "us-central1");
-    const callGeminiApi = httpsCallable(functions, "callGeminiApi");
+import type { ClassNewsletterSchema } from "@/types";
+import { PROMPT_EXTRACT } from "@/constants";
 
-    console.log("Calling Firebase Callable Function...");
+export const extractClassNewsletterData = async (
+  rawText: string
+): Promise<ClassNewsletterSchema> => {
+  console.log("=== Gemini Service Start ===");
 
-    const result = await callGeminiApi({
-      prompt: `${PROMPT_EXTRACT}\n\n本文：\n"""\n${rawText}\n"""`
-    });
-
-    console.log("Firebase Function result:", result);
-
-    const data = (result.data as any).result;
-    
-    if (!data || typeof data !== 'object') {
-      throw new Error("Firebase Functionから無効なデータが返されました");
-    }
-    
-    return data as ClassNewsletterSchema;
-
-  } catch (error) {
-    console.error("=== Gemini Service Error ===");
-    console.error("Error:", error);
-    
-    if (error && typeof error === 'object' && 'code' in error) {
-      const firebaseError = error as any;
-      switch (firebaseError.code) {
-        case 'functions/unauthenticated':
-          throw new Error("認証が必要です。ログインしてください。");
-        case 'functions/failed-precondition':
-          throw new Error("サーバーの設定に問題があります。管理者にお問い合わせください。");
-        case 'functions/invalid-argument':
-          throw new Error("入力データに問題があります。もう一度お試しください。");
-        case 'functions/internal':
-          throw new Error("サーバー内部でエラーが発生しました。しばらく待ってから再度お試しください。");
-        default:
-          throw new Error(`Firebase Function Error: ${firebaseError.message}`);
-      }
-    }
-    
-    throw new Error("情報の抽出中にエラーが発生しました。");
+  // 仕様：未ログインでも体験OK → 匿名で自動サインイン
+  if (!auth.currentUser) {
+    await signInAnonymously(auth);
+    console.log("Signed in anonymously:", auth.currentUser?.uid);
+  } else {
+    const u = auth.currentUser!;
+    console.log("User status:", u.isAnonymous ? `anonymous (${u.uid})` : `logged in as ${u.uid}`);
   }
+
+  console.log("Raw text length:", rawText.length);
+
+  // Functions 側の region と一致（functions/index.js が us-central1）
+  const functions = getFunctions(app, "us-central1");
+  const callGeminiApi = httpsCallable(functions, "callGeminiApi");
+
+  console.log("Calling Firebase Callable Function...");
+
+  const result = await callGeminiApi({
+    prompt: `${PROMPT_EXTRACT}\n\n本文：\n"""\n${rawText}\n"""`,
+  });
+
+  console.log("Firebase Function result:", result);
+
+  // サーバは { result: ... } で返す想定（保険で data 本体も許容）
+  const data = (result.data as any)?.result ?? (result.data as any);
+  if (!data || typeof data !== "object") {
+    throw new Error("Firebase Functionから無効なデータが返されました");
+  }
+  return data as ClassNewsletterSchema;
 };
