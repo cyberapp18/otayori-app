@@ -44,7 +44,7 @@ exports.callGeminiApi = onCall(
           }],
           generationConfig: {
             response_mime_type: "application/json",
-            temperature: 0.2,   // ★ 低めで安定
+            temperature: 0.2, // 低めで安定
             topP: 0.1,
             topK: 32,
             // maxOutputTokens: 2048 など必要に応じて
