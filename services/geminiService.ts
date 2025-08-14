@@ -27,8 +27,11 @@ function safeJson(input: any): any {
 
 /** ID 生成（fallback あり） */
 function uid(prefix: string) {
-  try { return `${prefix}-${crypto.randomUUID()}`; }
-  catch { return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2,8)}`; }
+  try {
+    return `${prefix}-${crypto.randomUUID()}`;
+  } catch {
+    return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  }
 }
 
 function toConfidence(partial?: Partial<ActionConfidence>): ActionConfidence {
@@ -42,9 +45,91 @@ function toConfidence(partial?: Partial<ActionConfidence>): ActionConfidence {
 function toRepeatRule(src: any): RepeatRule | null {
   if (!src) return null;
   const byDay = src.byDay ?? src.by_day ?? src.days ?? null;
-  const time  = src.time ?? null;
+  const time = src.time ?? null;
   if (!Array.isArray(byDay) || !time) return null;
   return { byDay, time };
+}
+
+/* =========================
+   追加：デデュープ & フィルタ
+   ========================= */
+
+/** 比較用キー正規化（大小・空白・句読点等を無視） */
+function normKey(s: string) {
+  return (s || "")
+    .toLowerCase()
+    .replace(/\s+/g, "")
+    .replace(/[、。,.!！？（）()［\[\]【】・/／\\-]/g, "");
+}
+
+/** 重複排除＋ノイズ除去（同名は情報量が多い方を採用） */
+function dedupeActions(actions: NewsletterAction[]): NewsletterAction[] {
+  const out: NewsletterAction[] = [];
+  const seenAmbiguousTodo = new Set<string>(); // 曖昧TODOの連発防止
+
+  for (const a of actions) {
+    const key = normKey(a.event_name);
+    if (!key) continue;
+
+    // 短すぎる/意味が薄いタイトルは除外（例: 「練習」「がい」だけ等）
+    if (a.event_name.trim().length < 3) continue;
+
+    // 既に同名がある→情報量（date/due/items数）で勝負
+    const idx = out.findIndex(x => normKey(x.event_name) === key);
+    if (idx >= 0) {
+      const cur = out[idx];
+      const curScore =
+        (cur.event_date ? 1 : 0) + (cur.due_date ? 1 : 0) + (cur.items?.length || 0);
+      const newScore =
+        (a.event_date ? 1 : 0) + (a.due_date ? 1 : 0) + (a.items?.length || 0);
+      if (newScore > curScore) out[idx] = a;
+      continue;
+    }
+
+    // 具体性シグナルが何も無い TODO は最大1件までに抑制
+    const hasSignal = !!(
+      a.event_date ||
+      a.due_date ||
+      (a.items && a.items.length) ||
+      a.fee ||
+      a.notes
+    );
+    if (!hasSignal && a.type === "todo") {
+      if (seenAmbiguousTodo.has("ambiguous")) continue;
+      seenAmbiguousTodo.add("ambiguous");
+    }
+
+    out.push(a);
+  }
+  return out;
+}
+
+/** 同名の event/todo が並存する場合は「日付のある event」を優先 */
+function preferEventOverTodo(actions: NewsletterAction[]): NewsletterAction[] {
+  const byName = new Map<string, NewsletterAction>();
+  for (const a of actions) {
+    const k = normKey(a.event_name);
+    const prev = byName.get(k);
+    if (!prev) {
+      byName.set(k, a);
+      continue;
+    }
+    const prevIsEvent = prev.type === "event" && !!prev.event_date;
+    const curIsEvent = a.type === "event" && !!a.event_date;
+    if (curIsEvent && !prevIsEvent) byName.set(k, a);
+  }
+  return Array.from(byName.values());
+}
+
+/** 並び順：日付/締切が近い順 → 種別(event→todo) → 名称 */
+function sortActions(actions: NewsletterAction[]): NewsletterAction[] {
+  return actions.slice().sort((a, b) => {
+    const ad = a.event_date || a.due_date || "9999-12-31";
+    const bd = b.event_date || b.due_date || "9999-12-31";
+    if (ad !== bd) return ad.localeCompare(bd);
+    if (a.type !== b.type) return a.type === "event" ? -1 : 1;
+    return a.event_name.localeCompare(b.event_name);
+  });
 }
 
 /** “新/旧/自由記述” どれでも → 既存スキーマ(ClassNewsletterSchema)に正規化 */
@@ -53,10 +138,7 @@ function normalizeToLegacySchema(raw: any): ClassNewsletterSchema {
 
   // ---- header ----
   const issueDate: string | null =
-    d.header?.issue_date ??
-    d.meta?.date ??
-    d.date ??
-    null;
+    d.header?.issue_date ?? d.meta?.date ?? d.date ?? null;
 
   const header: ClassNewsletterHeader = {
     title: d.header?.title ?? d.title ?? d.headline ?? d.newsletterTitle ?? null,
@@ -68,11 +150,7 @@ function normalizeToLegacySchema(raw: any): ClassNewsletterSchema {
 
   // ---- overview / key_points ----
   const overview: string =
-    d.overview ??
-    d.summary ??
-    d.excerpt ??
-    d.body ??
-    "内容を分析しました";
+    d.overview ?? d.summary ?? d.excerpt ?? d.body ?? "内容を分析しました";
 
   const key_points: string[] = Array.isArray(d.key_points)
     ? d.key_points.filter((p: any) => typeof p === "string")
@@ -93,10 +171,7 @@ function normalizeToLegacySchema(raw: any): ClassNewsletterSchema {
   const fromTodo = (t: any): NewsletterAction => ({
     type: "todo",
     event_name:
-      t?.title ??
-      t?.task ??
-      t?.event_name ??
-      (typeof t === "string" ? t : "要確認"),
+      t?.title ?? t?.task ?? t?.event_name ?? (typeof t === "string" ? t : "要確認"),
     is_continuation: !!t?.is_continuation,
     event_date: t?.event_date ?? null,
     due_date: t?.dueDate ?? t?.deadline ?? t?.due_date ?? null,
@@ -104,7 +179,10 @@ function normalizeToLegacySchema(raw: any): ClassNewsletterSchema {
     fee: t?.fee ?? null,
     repeat_rule: toRepeatRule(t?.repeat_rule),
     audience: t?.audience ?? null,
-    importance: (t?.priority ?? t?.importance ?? "medium") as "high" | "medium" | "low",
+    importance: (t?.priority ?? t?.importance ?? "medium") as
+      | "high"
+      | "medium"
+      | "low",
     action_required: true,
     notes: t?.notes ?? null,
     confidence: toConfidence(t?.confidence),
@@ -120,18 +198,23 @@ function normalizeToLegacySchema(raw: any): ClassNewsletterSchema {
     fee: e?.fee ?? null,
     repeat_rule: toRepeatRule(e?.repeat_rule),
     audience: e?.audience ?? null,
-    importance: (e?.priority ?? e?.importance ?? "medium") as "high" | "medium" | "low",
+    importance: (e?.priority ?? e?.importance ?? "medium") as
+      | "high"
+      | "medium"
+      | "low",
     action_required: true,
     notes: e?.description ?? e?.notes ?? null,
     confidence: toConfidence(e?.confidence),
   });
 
-  // すでに旧スキーマっぽい action が来ている場合はそのまま使いつつデフォルトを補完
+  // すでに旧スキーマっぽい action が来ている場合はそのまま使いつつデフォルト補完
   const passThroughActions: NewsletterAction[] = Array.isArray(d.actions)
     ? d.actions
-        .filter((a: any) => a && typeof a === "object" && typeof a.event_name === "string")
+        .filter(
+          (a: any) => a && typeof a === "object" && typeof a.event_name === "string",
+        )
         .map((a: any) => ({
-          type: (a.type === "event" || a.type === "todo") ? a.type : "todo",
+          type: a.type === "event" || a.type === "todo" ? a.type : "todo",
           event_name: a.event_name,
           is_continuation: !!a.is_continuation,
           event_date: a.event_date ?? null,
@@ -147,7 +230,7 @@ function normalizeToLegacySchema(raw: any): ClassNewsletterSchema {
         }))
     : [];
 
-  const actions: NewsletterAction[] = [
+  let actions: NewsletterAction[] = [
     ...passThroughActions,
     ...srcTodos.filter((t: any) => !t?.event_name).map(fromTodo),
     ...srcEvents.filter((e: any) => e?.title || e?.event_name).map(fromEvent),
@@ -165,11 +248,16 @@ function normalizeToLegacySchema(raw: any): ClassNewsletterSchema {
     audience: n?.audience ?? null,
   }));
 
+  /* ===== ここから後処理（重複・競合解消・並び） ===== */
+  actions = dedupeActions(actions);
+  actions = preferEventOverTodo(actions);
+  actions = sortActions(actions);
+
   return { header, overview, key_points, actions, infos };
 }
 
 export const extractClassNewsletterData = async (
-  rawText: string
+  rawText: string,
 ): Promise<ClassNewsletterSchema> => {
   console.log("=== Gemini Service Start ===");
 
@@ -179,7 +267,10 @@ export const extractClassNewsletterData = async (
     console.log("Signed in anonymously:", auth.currentUser?.uid);
   } else {
     const u = auth.currentUser!;
-    console.log("User status:", u.isAnonymous ? `anonymous (${u.uid})` : `logged in as ${u.uid}`);
+    console.log(
+      "User status:",
+      u.isAnonymous ? `anonymous (${u.uid})` : `logged in as ${u.uid}`,
+    );
   }
 
   console.log("Raw text length:", rawText.length);
@@ -190,7 +281,7 @@ export const extractClassNewsletterData = async (
 
   console.log("Calling Firebase Callable Function...");
   const res: any = await callGeminiApi({
-    // 返却形式は正規化で吸収。プロンプトの厳密化は任意で（後述）
+    // 返却形式の揺れは正規化で吸収
     prompt: `${PROMPT_EXTRACT}\n\n本文：\n"""\n${rawText}\n"""`,
   });
 
@@ -200,5 +291,5 @@ export const extractClassNewsletterData = async (
   const normalized = normalizeToLegacySchema(raw);
   console.log("Normalized (legacy schema):", normalized);
 
-  return normalized; // ← 既存の ClassNewsletterSchema そのまま返す
+  return normalized; // 既存の ClassNewsletterSchema で返す
 };

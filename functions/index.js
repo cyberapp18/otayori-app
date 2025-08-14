@@ -38,9 +38,19 @@ exports.callGeminiApi = onCall(
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          contents: [{ role: "user", parts: [{ text: prompt }] }],
-          generationConfig: { response_mime_type: "application/json" },
+          contents: [{
+            role: "user",
+            parts: [{ text: prompt }],
+          }],
+          generationConfig: {
+            response_mime_type: "application/json",
+            temperature: 0.2,   // ★ 低めで安定
+            topP: 0.1,
+            topK: 32,
+            // maxOutputTokens: 2048 など必要に応じて
+          },
         }),
+
       });
 
       if (!r.ok) {

@@ -2,49 +2,21 @@
 import { Type } from "@google/genai";
 
 export const PROMPT_EXTRACT = `
-あなたは日本の保育園・幼稚園の「おたより」から、保護者に必要な情報のみを抽出するエキスパートです。
-出力は **次のキーのみ**を持つ JSON で、**コードブロックや説明文は一切禁止**です。
+役割：あなたは学校・園の「クラスだより」の本文テキストから、【概要サマリ】【重要ポイント】【行動が必要な項目（イベント/TODO）】【通知不要の情報】に分解し、厳格なJSONを出力するAIです。
 
-{
-  "header": {
-    "title": string|null,
-    "class_name": string|null,
-    "school_name": string|null,
-    "issue_month": string|null,   // YYYY-MM
-    "issue_date": string|null     // YYYY-MM-DD
-  },
-  "overview": string,             // 本文の要約（150〜300字）
-  "key_points": string[],         // 箇条書きの重要ポイント（0〜5件）
-  "actions": [                    // TODO / イベント（重複は不可）
-    {
-      "type": "event" | "todo",
-      "event_name": string,       // 具体的で重複しない名称
-      "is_continuation": boolean, // 継続案件なら true
-      "event_date": string|null,  // YYYY-MM-DD（不明なら null）
-      "due_date": string|null,    // YYYY-MM-DD（不明なら null）
-      "items": string[],          // 持ち物（なければ []）
-      "fee": string|null,
-      "repeat_rule": { "byDay": string[], "time": string } | null,
-      "audience": string|null,
-      "importance": "high" | "medium" | "low",
-      "action_required": true,
-      "notes": string|null,
-      "confidence": { "date": number, "due": number, "items": number } // 0〜1
-    }
-  ],
-  "infos": [                      // 補足・お知らせ
-    { "title": string, "summary": string, "audience": string|null }
-  ]
-}
-
-厳守ルール：
-- **重複禁止**：同じ意味/表現（例：「うがい」「ぶくぶくうがい」）は **1件に統合**。
-- **具体性フィルタ**：曖昧な記述（例：活動紹介・作文・園での様子など）は actions に入れない。
-  actions には「日付/締切/持ち物/費用/連絡事項」が明確な **保護者の行動**だけを含める。
-- イベントとTODOが両方あり得る場合：日付・開始時刻などが本文に明記されていれば "event"、無ければ "todo"。
-- 日付/締切は本文に根拠があるときのみ。推測はしない。不明なら null。
-- 返答は **JSONのみ**。前後に文章や \`\`\`json は付けない。
-`.trim();
+要件：
+- 入力はOCR済みの素テキストです。見出し（例：提灯づくり/夏の遊び）や箇条書きを手がかりにセクションを正しく認識してください。
+- 「7月号」「令和◯年◯月◯日発行」などから issue_month（YYYY-MM形式）と issue_date（YYYY-MM-DD形式）を推定してください。
+- “行動が必要”の定義は、提出・準備・持ち物・参加可否の確認・支払い・当日判断が必要な事柄・反復して持参するもの（体操服/水遊びセットなど）です。
+- 本文中に「継続」「引き続き」「再掲」などの言葉で、以前からのお願いであることが示されている項目は is_continuation を true に設定してください。新規の依頼事項の場合は false または省略してください。
+- 本文に上記「行動が必要」な項目が一切含まれない場合、 \`actions\` 配列は空（\`[]\`）にしてください。その場合でも、\`overview\`と\`key_points\`は本文全体を要約して生成してください。
+- “通知不要”の定義は、学級の近況報告、作品の紹介、誕生日リスト（自分の子以外）、季節の話題など、直接的なアクションを伴わない情報です。
+- 繰り返しルールは repeat_rule を {"byDay":["MO","TU"], "time":"HH:mm"} 形式で表現してください。明記がない場合は null としてください。
+- 「ぶくぶくうがいの練習」のような、特定の曜日が指定されていない習慣的な依頼事項（毎日行うべきこと）は、平日の繰り返しルール（例: {"byDay":["MO","TU","WE","TH","FR"], "time": "08:00"}）として\`repeat_rule\`を設定してください。
+- 重要度(importance)は high/medium/low の3段階で評価してください。締切が近い、当日の朝に準備が必要、緊急の言葉がある場合は high です。
+- 推測は禁止します。原文にない持ち物や日付は生成せず、曖昧な場合は notes に「要確認」と記述してください。
+- 出力は指定されたスキーマのJSONオブジェクトのみとし、前後に\`\`\`jsonや他のテキストを含めないでください。
+`;
 
 export const CLASS_NEWSLETTER_SCHEMA = {
   type: Type.OBJECT,
