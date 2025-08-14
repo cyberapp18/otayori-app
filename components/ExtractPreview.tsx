@@ -4,19 +4,16 @@ import type { ClassNewsletterSchema } from '../types';
 import ConfidenceBadge from './ConfidenceBadge';
 import { CheckCircleIcon } from './Icon';
 
-// 統一表示用の型
 type UTodo   = { id?: string; title: string; dueDate?: string | null; priority?: string; completed?: boolean };
 type UEvent  = { id?: string; title: string; date?: string | null; time?: string | null; location?: string | null; description?: string | null };
 type UNotice = { id?: string; title: string; content: string; importance?: string };
 type UData   = { title: string; subtitle?: string; summary: string; keyPoints: string[]; todos: UTodo[]; events: UEvent[]; notices: UNotice[] };
 
-// 旧スキーマ（header/overview/...）か新スキーマ（title/summary/...）かを吸収して統一
+// 旧（header/overview/…）・新（title/summary/…）どちらでも受ける
 function adaptToUnified(data: any): UData {
   if (!data || typeof data !== 'object') {
     return { title: 'おたより', summary: '内容を分析しました', keyPoints: [], todos: [], events: [], notices: [] };
   }
-
-  // タイトル等
   const title =
     data.title ??
     data.header?.title ??
@@ -31,20 +28,17 @@ function adaptToUnified(data: any): UData {
   ].filter(Boolean);
   const subtitle = subtitleParts.length ? subtitleParts.join('・') : undefined;
 
-  const summary = data.summary ?? data.overview ?? data.excerpt ?? data.body ?? '内容を分析しました';
+  const summary = data.overview ?? data.summary ?? data.excerpt ?? data.body ?? '内容を分析しました';
 
-  // 重要ポイント（旧: key_points）
   const keyPoints: string[] = Array.isArray(data.key_points)
     ? data.key_points.filter((p: any) => typeof p === 'string')
     : [];
 
-  // TODO（新: todos / 旧: actions 等）
   const todoSrc =
     (Array.isArray(data.todos) && data.todos) ||
     (Array.isArray(data.tasks) && data.tasks) ||
     (Array.isArray(data.actions) && data.actions) ||
     [];
-
   const todos: UTodo[] = todoSrc.map((t: any) => {
     const title =
       t?.title ??
@@ -57,12 +51,10 @@ function adaptToUnified(data: any): UData {
     return { id: t?.id, title, dueDate, priority, completed };
   }).filter((t: UTodo) => !!t.title);
 
-  // イベント（新: events / 旧: actions からイベント性があるもの）
   const eventsSrc =
     (Array.isArray(data.events) && data.events) ||
     (Array.isArray(data.actions) && data.actions) ||
     [];
-
   const events: UEvent[] = eventsSrc
     .map((e: any) => {
       const title = e?.title ?? e?.event_name ?? null;
@@ -78,12 +70,10 @@ function adaptToUnified(data: any): UData {
     })
     .filter(Boolean) as UEvent[];
 
-  // お知らせ（新: notices / 旧: infos）
   const noticesSrc =
     (Array.isArray(data.notices) && data.notices) ||
     (Array.isArray(data.infos) && data.infos) ||
     [];
-
   const notices: UNotice[] = noticesSrc.map((n: any) => ({
     id: n?.id,
     title: n?.title ?? 'お知らせ',
@@ -174,9 +164,7 @@ const ExtractPreview: React.FC<{ data: ClassNewsletterSchema | any }> = ({ data 
 
         {u.keyPoints.length === 0 && u.todos.length === 0 && u.events.length === 0 && u.notices.length === 0 && (
           <div className="text-center p-4 bg-gray-50 rounded">
-            <p className="text-gray-500">
-              具体的なアクションは検出されませんでしたが、概要は正常に分析できました。
-            </p>
+            <p className="text-gray-500">具体的なアクションは検出されませんでしたが、概要は正常に分析できました。</p>
           </div>
         )}
       </div>

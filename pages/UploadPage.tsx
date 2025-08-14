@@ -82,14 +82,12 @@ const UploadPage: React.FC = () => {
     try {
       setIsSubmitting(true);
 
-      // 体験のみ（未ログイン）
       if (!isAuthenticated) {
         alert('AIによる分析が完了しました！\nログインすると、この情報を保存して家族と共有できます。');
         navigate('/login?from=upload-demo');
         return;
       }
 
-      // 本登録ユーザーの保存
       const uid = auth.currentUser?.uid;
       if (!uid) {
         alert('セッションが切れました。再度ログインしてください。');
@@ -99,10 +97,10 @@ const UploadPage: React.FC = () => {
 
       const newNotice: Notice = {
         id: `notice-${Date.now()}`,
-        familyId: uid,                       // ← user?.uid ではなく auth から取得
+        familyId: uid,
         rawText,
-        extractJson: extractedData,
-        summary: extractedData.summary,      // ← overview ではなく summary を使用
+        extractJson: extractedData,       // ClassNewsletterSchema そのまま保存
+        summary: extractedData.overview,  // ★ types.ts の意図どおり overview を使用
         createdAt: new Date().toISOString(),
         seenBy: [],
         pinned: false,
