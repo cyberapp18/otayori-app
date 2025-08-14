@@ -54,30 +54,27 @@ function toRepeatRule(src: any): RepeatRule | null {
    追加：タイトル推測ロジック
    ========================= */
 /** 原文から見出し候補を推測（先頭〜5行・「◯◯だより/お知らせ」を優先。無ければ最初の一文） */
-function guessTitleFromRaw(rawText?: string): string | null {
-  if (!rawText) return null;
-  const lines = rawText
-    .split(/\r?\n/)
-    .map((l) => l.trim())
-    .filter(Boolean);
+// 追加ユーティリティ（ファイル上部のユーティリティ群の下に置く）
+function monthLabel(issueMonth?: string | null, issueDate?: string | null) {
+  const ym = issueMonth ?? (issueDate ? issueDate.slice(0, 7) : null);
+  if (!ym) return null;
+  const [, m] = ym.split("-");
+  const n = Number(m);
+  return n >= 1 && n <= 12 ? `${n}月号` : null;
+}
 
-  // 上位数行で見出しらしいものを探す
-  for (const l of lines.slice(0, 5)) {
-    // 日付や短すぎる行は除外
-    if (/^(令和|平成|\d{4}年|\d{1,2}月|\d{1,2}日)/.test(l)) continue;
-    if (l.length < 4) continue;
+function jpRatio(s: string) {
+  const jp = (s.match(/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}々ー]/gu) || []).length;
+  return jp / Math.max(1, s.length);
+}
 
-    // 見出しワード
-    if (/だより|便り|おしらせ|お知らせ|クラスだより|学年だより/.test(l)) {
-      return l.slice(0, 30);
-    }
-  }
-
-  // 先頭の一文
-  const firstSentence = rawText.split(/[。.\n]/)[0]?.trim();
-  return firstSentence && firstSentence.length >= 4
-    ? firstSentence.slice(0, 30)
-    : null;
+function cleanLine(s: string) {
+  return s
+    .normalize("NFKC")
+    .replace(/\s+/g, " ")
+    .replace(/[^\p{Letter}\p{Number}\s々ー・、。\-]/gu, "") // 変な記号を除去
+    .replace(/\s*(、|。)+\s*$/u, "")
+    .trim();
 }
 
 /* =========================
@@ -165,16 +162,136 @@ function normalizeToLegacySchema(raw: any, rawText?: string): ClassNewsletterSch
     issue_month: d.header?.issue_month ?? (issueDate ? issueDate.slice(0, 7) : null),
     issue_date: issueDate,
   };
+  // —— 汎用タイトル抽出ユーティリティ ——
 
-  // ★ タイトルの強制補完（ここが今回の肝）
-  if (!header.title) {
-    header.title =
-      guessTitleFromRaw(rawText) ||
-      (header.class_name
-        ? `${header.class_name}だより${header.issue_month ? `（${header.issue_month}）` : ""}`
-        : null) ||
-      "おたより";
+  // 行の正規化（既存 cleanLine があればそれを使用してOK。無ければこのまま）
+  function cleanLine(s: string) {
+    return s
+      .normalize("NFKC")
+      .replace(/[ \t　]+/g, " ")
+      .replace(/[^\p{Letter}\p{Number}\s々ー・、。\-]/gu, "")
+      .replace(/\s*(、|。)+\s*$/u, "")
+      .trim();
   }
+
+  function jpRatio(s: string) {
+    const jp = (s.match(/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}々ー]/gu) || []).length;
+    return jp / Math.max(1, s.length);
+  }
+
+  // 文っぽい行（説明文）は減点対象
+  function looksSentenceLike(s: string) {
+    if (s.length >= 26) return true;
+    if (/[。.!?？！]$/.test(s)) return true;
+    if (/(です|ます|でした|だった|しています|されます)$/.test(s)) return true;
+    return false;
+  }
+
+  // OCRの先頭〜12行＋短い行の連結も候補化（例:「7月」「園だより」→「7月園だより」）
+  function collectRawTitleCandidates(rawText?: string): string[] {
+    if (!rawText) return [];
+    const lines = rawText
+      .split(/\r?\n/)
+      .map(cleanLine)
+      .filter(Boolean)
+      .slice(0, 12);
+
+    const cands: string[] = [...lines];
+
+    // 短い連結（冒頭近辺のみ）
+    for (let i = 0; i < Math.min(lines.length - 1, 6); i++) {
+      const a = lines[i], b = lines[i + 1];
+      if (a.length >= 2 && a.length <= 6 && b.length >= 2 && b.length <= 8) {
+        cands.push(cleanLine(a + b));
+        cands.push(cleanLine(a + " " + b));
+      }
+    }
+    return Array.from(new Set(cands)).filter(Boolean);
+  }
+
+  // issue_month / issue_date から「n月」を作る（既存 monthLabel が "n月号" なら号を外す）
+  function monthOnly(issueMonth?: string | null, issueDate?: string | null) {
+    const ym = issueMonth ?? (issueDate ? issueDate.slice(0, 7) : null);
+    if (!ym) return null;
+    const n = Number(ym.split("-")[1]);
+    return n >= 1 && n <= 12 ? `${n}月` : null;
+  }
+
+  // スコアリング（位置・長さ・日本語率・非文章性・月表現・一般語あり）
+  function scoreTitle(line: string, indexHint: number, mHint?: string | null) {
+    const s = cleanLine(line);
+    if (!s) return -999;
+
+    let score = 0;
+    // 位置（上ほど強い）
+    score += Math.max(0, 10 - indexHint) * 0.8;
+
+    // 長さ（4〜20 文字が理想）
+    if (s.length >= 4 && s.length <= 20) score += 2;
+    else if (s.length <= 28) score += 0.5;
+    else score -= 2;
+
+    // 日本語率
+    const jpr = jpRatio(s);
+    if (jpr >= 0.8) score += 1.5;
+    else if (jpr >= 0.6) score += 0.5;
+    else score -= 0.5;
+
+    // 文っぽさは減点
+    if (looksSentenceLike(s)) score -= 2;
+
+    // 句読点が少ないほど +0.5
+    if (!/[、。]/.test(s)) score += 0.5;
+
+    // 月表現（全角数字も可）
+    if (/(?:[0-9１２３４５６７８９]{1,2})\s*月/.test(s)) score += 1;
+
+    // 一般的な語（必須ではない：あれば +1）
+    if (/(だより|たより|便り|お知らせ|通信|ニュースレター|レター)/u.test(s)) score += 1;
+
+    // 月ヒントが含まれていれば +0.5
+    if (mHint && s.includes(mHint)) score += 0.5;
+
+    return score;
+  }
+
+  // 候補群からベストを選ぶ（最低品質しきい値あり）
+  function chooseTitleUniversal(cands: string[], mHint?: string | null): string | null {
+    let best: { s: string; score: number } | null = null;
+    cands.forEach((c, idx) => {
+      const sc = scoreTitle(c, idx, mHint);
+      if (!best || sc > best.score) best = { s: cleanLine(c), score: sc };
+    });
+    if (best && best.score >= 2.5 && jpRatio(best.s) >= 0.6) {
+      return best.s.slice(0, 24);
+    }
+    return null;
+  }
+
+
+  // ★ タイトルの強制補完（汎用版）
+  if (!header.title || jpRatio(header.title) < 0.6 || header.title.length < 3) {
+    const mHint = monthOnly(header.issue_month, header.issue_date); // 例: "7月"
+
+    // OCR候補 + 既存値から派生した候補をまとめてスコアリング
+    const rawCands = collectRawTitleCandidates(rawText);
+    const extraCands = [
+      header.title ?? "",
+      header.class_name ? `${header.class_name}だより` : "",
+      mHint && header.class_name ? `${mHint} ${header.class_name}だより` : "",
+      mHint ? `${mHint} おたより` : "",
+    ].filter(Boolean);
+
+    const chosen =
+      chooseTitleUniversal([...rawCands, ...extraCands], mHint) ||
+      (header.class_name && mHint ? `${mHint} ${header.class_name}だより` : null) ||
+      (header.class_name ? `${header.class_name}だより` : null) ||
+      (mHint ? `${mHint} おたより` : null);
+
+    header.title = cleanLine(chosen ?? "おたより");
+  }
+
+
 
   // ---- overview / key_points ----
   const overview: string =
