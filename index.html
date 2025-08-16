@@ -2,33 +2,57 @@
 <html lang="ja">
   <head>
     <meta charset="UTF-8" />
+    
+    <!-- Favicon and App Icons -->
+    <link rel="icon" type="image/png" href="/icon-32.png" sizes="32x32" />
+    <link rel="icon" type="image/png" href="/icon-192.png" sizes="192x192" />
+    <link rel="apple-touch-icon" href="/icon-192.png" />
+    
+    <!-- PWA Meta -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>おたよりポン！</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <meta name="theme-color" content="#F97316" />
+    <meta name="description" content="おたより、ポン！ですっきり。学校からのプリントを自動で予定管理。" />
+    <link rel="manifest" href="/manifest.json" />
+    
+    <!-- Open Graph / Social Media -->
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="おたよりポン！" />
+    <meta property="og:description" content="おたよりを撮ったら、やることポン！学校からのプリントを自動で予定管理。" />
+    <meta property="og:image" content="/icon-192.png" />
+    
+    <!-- Google Fonts - Brand Typography -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;500;700;800&display=swap" rel="stylesheet">
-    <style>
-      body {
-        font-family: 'M PLUS Rounded 1c', sans-serif;
+    <link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@400;500;700&family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <title>おたよりポン！</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              'pon-orange': '#F97316',
+              'cream': '#FFF7ED',
+              'ink': '#1F2937',
+              'sky': '#38BDF8',
+              'leaf': '#22C55E',
+              'plum': '#F43F5E',
+            },
+            fontFamily: {
+              'heading': ['"Zen Maru Gothic"', 'sans-serif'],
+              'sans': ['"Noto Sans JP"', 'sans-serif'],
+            },
+            borderRadius: {
+              'brand': '1rem',
+            }
+          }
+        }
       }
-    </style>
-  <script type="importmap">
-{
-  "imports": {
-    "react-dom/": "https://esm.sh/react-dom@^19.1.1/",
-    "@google/genai": "https://esm.sh/@google/genai@^1.13.0",
-    "react-router-dom": "https://esm.sh/react-router-dom@^7.8.0",
-    "react/": "https://esm.sh/react@^19.1.1/",
-    "react": "https://esm.sh/react@^19.1.1",
-    "tesseract.js": "https://esm.sh/tesseract.js@^5.1.0"
-  }
-}
-</script>
-<link rel="stylesheet" href="/index.css">
-</head>
-  <body class="bg-orange-50">
+    </script>
+  </head>
+  <body>
     <div id="root"></div>
-  <script type="module" src="/index.tsx"></script>
-</body>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
 </html>
