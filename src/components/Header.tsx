@@ -2,7 +2,8 @@
 import React from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { HomeIcon, SettingsIcon, UploadIcon, LogOutIcon } from './Icon';
-import { useAppContext } from '@/EnhancedAppContext';
+import { useAppContext } from '@/NewAppContext';
+import UsageIndicator from './UsageIndicator';
 
 
 const Header: React.FC = () => {
@@ -35,6 +36,9 @@ const Header: React.FC = () => {
             </div>
 
             <div className="flex items-center space-x-2 sm:space-x-4">
+              {/* Usage Indicator */}
+              <UsageIndicator />
+              
               {/* Desktop Nav Links */}
               <nav className="hidden md:flex items-center space-x-2">
                 <NavLink to={homeLink} className={({ isActive }) => `px-3 py-2 rounded-md text-sm font-medium ${isActive ? activeLinkClass : inactiveLinkClass}`}>
@@ -52,7 +56,9 @@ const Header: React.FC = () => {
               <div className="flex items-center space-x-2">
                 {isAuthenticated ? (
                   <>
-                    <span className="hidden sm:inline text-sm font-medium text-gray-700">こんにちは、{user?.username}さん</span>
+                    <span className="hidden sm:inline text-sm font-medium text-gray-700">
+                      こんにちは、{user?.displayName || user?.email}さん
+                    </span>
                     <button onClick={handleLogout} className="flex items-center p-2 sm:px-3 sm:py-2 rounded-md text-sm font-medium text-gray-500 hover:text-orange-600 hover:bg-orange-100 transition-colors">
                       <LogOutIcon className="w-5 h-5" />
                       <span className="hidden sm:inline ml-1">ログアウト</span>

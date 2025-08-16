@@ -1,8 +1,9 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    // Stripe拡張機能の標準設定
     match /customers/{uid} {
-      allow read: if request.auth.uid == uid;
+      allow read, write: if request.auth.uid == uid;
 
       match /checkout_sessions/{id} {
         allow read, write: if request.auth.uid == uid;
@@ -13,8 +14,12 @@ service cloud.firestore {
       match /payments/{id} {
         allow read: if request.auth.uid == uid;
       }
+      match /portal_sessions/{id} {
+        allow read, write: if request.auth.uid == uid;
+      }
     }
 
+    // Products (料金プラン) - 全員が読み取り可能
     match /products/{id} {
       allow read: if true;
 
@@ -27,9 +32,39 @@ service cloud.firestore {
       }
     }
     
+    // ユーザー情報（customersとは別でアプリ固有データ）
     match /users/{userId} {
-      // ユーザーは自身のドキュメントを読み書きできる
       allow read, write: if request.auth.uid == userId;
+    }
+    
+    // 家族管理
+    match /families/{familyId} {
+      allow read, write: if request.auth != null 
+        && (request.auth.uid in resource.data.members 
+            || request.auth.uid == resource.data.ownerId);
+      allow create: if request.auth != null;
+    }
+    
+    // おたより管理
+    match /notices/{noticeId} {
+      allow read, write: if request.auth != null 
+        && request.auth.uid == resource.data.userId;
+      allow read: if request.auth != null 
+        && resource.data.familyId != null 
+        && exists(/databases/$(database)/documents/families/$(resource.data.familyId))
+        && request.auth.uid in get(/databases/$(database)/documents/families/$(resource.data.familyId)).data.members;
+      allow create: if request.auth != null;
+    }
+    
+    // タスク管理
+    match /tasks/{taskId} {
+      allow read, write: if request.auth != null 
+        && request.auth.uid == resource.data.userId;
+      allow read: if request.auth != null 
+        && resource.data.familyId != null 
+        && exists(/databases/$(database)/documents/families/$(resource.data.familyId))
+        && request.auth.uid in get(/databases/$(database)/documents/families/$(resource.data.familyId)).data.members;
+      allow create: if request.auth != null;
     }
   }
 }

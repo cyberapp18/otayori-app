@@ -31,8 +31,7 @@ const LandingPage: React.FC = () => {
         "AI解析：月4回まで",
         "保存・履歴：24時間で自動削除",
         "家族と共有：なし",
-        "通知・カレンダー：なし",
-        "透かし・ぼかし：なし"
+        "通知・カレンダー：なし"
       ],
       buttonText: "無料で始める",
       buttonStyle: "bg-gray-100 text-orange-600 hover:bg-gray-200"
@@ -46,8 +45,7 @@ const LandingPage: React.FC = () => {
         "AI解析：月30回まで",
         "保存・履歴：4週間保存",
         "家族と共有：5人まで",
-        "SNS通知・カレンダー出力・自動同期",
-        "透かし・ぼかし：なし"
+        "SNS通知・カレンダー出力・自動同期"
       ],
       buttonText: "14日間無料トライアル",
       buttonStyle: "bg-orange-500 text-white hover:bg-orange-600",
@@ -61,9 +59,8 @@ const LandingPage: React.FC = () => {
       features: [
         "AI解析：月200回まで",
         "保存・履歴：6ヶ月保存",
-        "家族と共有：10人まで",
-        "SNS通知・カレンダー出力・自動同期",
-        "透かし・ぼかし：なし"
+        "家族と共有：8人まで",
+        "SNS通知・カレンダー出力・自動同期"
       ],
       buttonText: "14日間無料トライアル",
       buttonStyle: "bg-blue-500 text-white hover:bg-blue-600"
