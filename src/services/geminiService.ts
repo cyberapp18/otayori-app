@@ -1,8 +1,8 @@
 // services/geminiService.ts
 import { getFunctions, httpsCallable } from "firebase/functions";
 import { signInAnonymously } from "firebase/auth";
-import app, { auth } from "@/services/firebase";
-import { PROMPT_EXTRACT } from "@/constants";
+import app, { auth } from "./firebase";
+import { PROMPT_EXTRACT } from "../constants/index";
 import type {
   ClassNewsletterSchema,
   ClassNewsletterHeader,
@@ -10,7 +10,7 @@ import type {
   NewsletterInfo,
   ActionConfidence,
   RepeatRule,
-} from "@/types";
+} from "../types";
 
 /** 文字列/コードブロックでも安全に JSON 化 */
 function safeJson(input: any): any {

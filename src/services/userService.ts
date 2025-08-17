@@ -7,21 +7,21 @@ import {
   increment 
 } from 'firebase/firestore';
 import { User } from 'firebase/auth';
-import { db } from '@/services/firebase';
+import { db } from './firebase';
 
 export interface UserProfile {
   uid: string;
   email: string;
   displayName: string;
-  emailVerified: boolean;
+  emailVerified?: boolean;
   createdAt: Date;
-  updatedAt: Date;
-  isActive: boolean;
-  currentPlan: 'free' | 'standard' | 'pro';
-  planStatus: string;
-  monthlyUsage: number;
-  lastUsageReset: Date;
-  familyRole: 'owner' | 'member';
+  updatedAt?: Date;
+  isActive?: boolean;
+  planType: 'free' | 'standard' | 'pro';
+  monthlyLimit: number;
+  currentMonthUsage: number;
+  lastResetDate: Date;
+  familyRole?: 'owner' | 'member';
 }
 
 export class UserService {
@@ -45,19 +45,19 @@ export class UserService {
     await setDoc(userRef, {
       uid: user.uid,
       email: user.email || '',
-      displayName: user.displayName || '',
-      emailVerified: user.emailVerified,
+      displayName: user.displayName || user.email?.split('@')[0] || 'ユーザー',
+      emailVerified: user.emailVerified || false,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
       isActive: true,
       
       // プラン情報（初期は無料）
-      currentPlan: 'free',
-      planStatus: 'active',
+      planType: 'free',
+      monthlyLimit: 5,
       
       // 使用量（初期化）
-      monthlyUsage: 0,
-      lastUsageReset: serverTimestamp(),
+      currentMonthUsage: 0,
+      lastResetDate: serverTimestamp(),
       
       // 家族（初期は未所属）
       familyRole: 'owner'
@@ -76,10 +76,18 @@ export class UserService {
       
       const data = userSnap.data();
       return {
-        ...data,
+        uid: data.uid,
+        email: data.email,
+        displayName: data.displayName,
+        emailVerified: data.emailVerified,
         createdAt: data.createdAt?.toDate() || new Date(),
-        updatedAt: data.updatedAt?.toDate() || new Date(),
-        lastUsageReset: data.lastUsageReset?.toDate() || new Date(),
+        updatedAt: data.updatedAt?.toDate(),
+        isActive: data.isActive,
+        planType: data.planType || 'free',
+        monthlyLimit: data.monthlyLimit || 5,
+        currentMonthUsage: data.currentMonthUsage || 0,
+        lastResetDate: data.lastResetDate?.toDate() || new Date(),
+        familyRole: data.familyRole || 'owner'
       } as UserProfile;
     } catch (error) {
       console.error('Error fetching user profile:', error);
@@ -110,24 +118,24 @@ export class UserService {
 
     // 月次使用量リセットチェック
     const now = new Date();
-    const lastReset = profile.lastUsageReset;
+    const lastReset = profile.lastResetDate;
     const monthsDiff = (now.getFullYear() - lastReset.getFullYear()) * 12 + 
                       (now.getMonth() - lastReset.getMonth());
 
     if (monthsDiff > 0) {
       // 使用量リセットが必要
       await this.resetMonthlyUsage(userId);
-      profile.monthlyUsage = 0;
+      profile.currentMonthUsage = 0;
     }
 
-    const limit = limits[profile.currentPlan];
-    const remaining = Math.max(0, limit - profile.monthlyUsage);
+    const limit = limits[profile.planType as keyof typeof limits] || limits.free;
+    const remaining = Math.max(0, limit - profile.currentMonthUsage);
 
     return {
       canUse: remaining > 0,
       remaining,
-      planType: profile.currentPlan,
-      needsUpgrade: remaining <= 0 && profile.currentPlan === 'free'
+      planType: profile.planType,
+      needsUpgrade: remaining <= 0 && profile.planType === 'free'
     };
   }
 
@@ -137,7 +145,7 @@ export class UserService {
   static async incrementUsage(userId: string): Promise<void> {
     const userRef = doc(db, 'customers', userId);
     await updateDoc(userRef, {
-      monthlyUsage: increment(1),
+      currentMonthUsage: increment(1),
       updatedAt: serverTimestamp()
     });
   }
@@ -148,8 +156,8 @@ export class UserService {
   static async resetMonthlyUsage(userId: string): Promise<void> {
     const userRef = doc(db, 'customers', userId);
     await updateDoc(userRef, {
-      monthlyUsage: 0,
-      lastUsageReset: serverTimestamp(),
+      currentMonthUsage: 0,
+      lastResetDate: serverTimestamp(),
       updatedAt: serverTimestamp()
     });
   }
@@ -159,13 +167,18 @@ export class UserService {
    */
   static async updatePlan(
     userId: string, 
-    plan: 'free' | 'standard' | 'pro', 
-    status: string = 'active'
+    plan: 'free' | 'standard' | 'pro'
   ): Promise<void> {
+    const limits = {
+      free: 5,
+      standard: 30,
+      pro: 200
+    };
+    
     const userRef = doc(db, 'customers', userId);
     await updateDoc(userRef, {
-      currentPlan: plan,
-      planStatus: status,
+      planType: plan,
+      monthlyLimit: limits[plan],
       updatedAt: serverTimestamp()
     });
   }

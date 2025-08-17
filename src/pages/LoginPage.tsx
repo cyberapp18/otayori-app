@@ -1,9 +1,9 @@
 
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useAppContext } from '@/EnhancedAppContext';
-import Button from '@/components/Button';
-import { sanitize } from '@/services/sanitization';
+import { useAppContext } from '../AppContext';
+import Button from '../components/Button';
+import { sanitize } from '../services/sanitization';
 
 const LoginPage: React.FC = () => {
   const [email, setEmail] = useState('');

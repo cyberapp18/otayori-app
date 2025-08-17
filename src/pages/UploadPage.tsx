@@ -1,27 +1,15 @@
 // pages/UploadPage.tsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAppContext } from '@/EnhancedAppContext';
-import Uploader from '@/components/Uploader';
-import Spinner from '@/components/Spinner';
-import ExtractPreview from '@/components/ExtractPreview';
-import Button from '@/components/Button';
-import { performOCR } from '@/services/ocrService';
-import { extractClassNewsletterData } from '@/services/geminiService';
-import { sanitize } from '@/services/sanitization';
-import { ClassNewsletterSchema, Notice } from '@/types/index';
-import type { Task } from "@/types/index";
-
-// normalizeToISODate関数の定義
-const normalizeToISODate = (dateStr: string | null, fallbackMonth: string | null): string => {
-  if (!dateStr) return new Date().toISOString();
-  try {
-    const date = new Date(dateStr);
-    return date.toISOString();
-  } catch {
-    return new Date().toISOString();
-  }
-};
+import { useAppContext } from '../AppContext';
+import Uploader from '../components/Uploader';
+import Spinner from '../components/Spinner';
+import ExtractPreview from '../components/ExtractPreview';
+import Button from '../components/Button';
+import { performOCR } from '../services/ocrService';
+import { extractClassNewsletterData } from '../services/geminiService';
+import { sanitize } from '../services/sanitization';
+import { ClassNewsletterSchema } from '../types';
 
 enum UploadStep {
   SelectFile,
@@ -53,7 +41,7 @@ const UploadPage: React.FC = () => {
   const [imageDataUrl, setImageDataUrl] = useState<string | null>(null);
   const [selectedChildIds, setSelectedChildIds] = useState<string[]>([]);
 
-  const { addNotice, imageRetention, children, isAuthenticated, user, addTask } = useAppContext();
+  const { isAuthenticated, user } = useAppContext();
   const navigate = useNavigate();
 
   useEffect(() => { setStartTime(Date.now()); }, []);
@@ -66,22 +54,100 @@ const UploadPage: React.FC = () => {
   };
 
   const handleFileSelect = async (file: File, dataUrl: string) => {
+    console.log('handleFileSelect called with:', file.name);
     try {
       setImageDataUrl(dataUrl);
       setStep(UploadStep.ProcessingOCR);
 
-      const ocrText = await performOCR(file);
-      setRawText(ocrText);
-
+      // 暫定的なモックデータでテスト
+      console.log('Using mock data for testing...');
+      await new Promise(resolve => setTimeout(resolve, 1500)); // OCRの時間をシミュレート
+      
+      const mockOcrText = `
+      さくら組の保護者の皆様へ
+      
+      2024年9月のお知らせ
+      
+      ■今月の行事予定
+      9月15日（日） 運動会（雨天時：9月22日）
+      9月20日（金） 授業参観　午前10時～
+      
+      ■持ち物のお願い
+      ・運動会用の体操服（白いシャツと紺のハーフパンツ）
+      ・水筒（お茶または水のみ）
+      ・タオル
+      
+      ■提出物
+      9月10日（火）までに
+      ・健康カード
+      ・運動会参加同意書
+      
+      ご不明な点がございましたら、担任までお声かけください。
+      `;
+      
+      setRawText(mockOcrText);
       setStep(UploadStep.ProcessingAI);
-      const normalized = await extractClassNewsletterData(ocrText);
+
+      await new Promise(resolve => setTimeout(resolve, 1000)); // AI分析の時間をシミュレート
+      
+      const mockExtractedData = {
+        header: {
+          title: "9月のお知らせ",
+          class_name: "さくら組",
+          school_name: null,
+          issue_month: "2024-09",
+          issue_date: "2024-09-01"
+        },
+        overview: "9月の運動会と授業参観についてのお知らせです。運動会は9月15日、授業参観は9月20日に開催されます。必要な持ち物や提出物についても記載されています。",
+        key_points: [
+          "運動会：9月15日（雨天時9月22日）",
+          "授業参観：9月20日 午前10時～",
+          "体操服・水筒・タオルを持参",
+          "健康カード・同意書を9月10日までに提出"
+        ],
+        actions: [
+          {
+            type: "event",
+            event_name: "運動会",
+            event_date: "2024-09-15",
+            due_date: null,
+            items: ["体操服", "水筒", "タオル"],
+            notes: "雨天時は9月22日に延期",
+            confidence: { date: 0.9, due: 0.8, items: 0.9 }
+          },
+          {
+            type: "event",
+            event_name: "授業参観",
+            event_date: "2024-09-20",
+            due_date: null,
+            items: [],
+            notes: "午前10時開始",
+            confidence: { date: 0.9, due: 0.7, items: 0.7 }
+          },
+          {
+            type: "todo",
+            event_name: "提出物",
+            event_date: null,
+            due_date: "2024-09-10",
+            items: ["健康カード", "運動会参加同意書"],
+            notes: "担任まで提出",
+            confidence: { date: 0.7, due: 0.9, items: 0.9 }
+          }
+        ],
+        info: []
+      };
+      
+      console.log('Mock AI analysis completed:', mockExtractedData);
 
       // XSS対策＋null対策
-      const sanitized = sanitizeObject(normalized) as ClassNewsletterSchema;
+      const sanitized = sanitizeObject(mockExtractedData) as ClassNewsletterSchema;
+      console.log('Sanitization completed:', sanitized);
       setExtractedData(sanitized);
 
       setStep(UploadStep.Preview);
+      console.log('Moving to preview step');
     } catch (e) {
+      console.error('Error in handleFileSelect:', e);
       setError((e as Error).message || '予期せぬエラーが発生しました');
       setStep(UploadStep.Error);
     }
@@ -98,44 +164,9 @@ const UploadPage: React.FC = () => {
         return;
       }
 
-      // 1) Notice の保存（既存のまま）
-      const noticeId = `notice-${Date.now()}`;
-      const newNotice = {
-        id: noticeId,
-        familyId: user!.uid,
-        rawText,
-        extractJson: extractedData,
-        summary: extractedData.overview,
-        createdAt: new Date().toISOString(),
-        seenBy: [],
-        pinned: false,
-        originalImage: imageRetention ? imageDataUrl : null,
-        childIds: selectedChildIds,
-      };
-      addNotice(newNotice);
-
-      // 2) actions → tasks へ変換（★ここがポイント）
-      const tasks: Task[] = extractedData.actions.map((a, i) => ({
-        id: `task-${Date.now()}-${i}`,
-        familyId: user!.uid,
-        noticeId,
-        title: a.event_name,
-        dueAt: normalizeToISODate(
-          a.due_date || a.event_date || null,
-          extractedData.header?.issue_month || null
-        ),
-        assigneeCid: selectedChildIds[0] ?? "unassigned",
-        completed: false,
-        createdAt: new Date().toISOString(),
-        isContinuation: !!a.is_continuation,
-        repeatRule: a.repeat_rule ?? null,
-        notes: a.notes ?? undefined,
-        childIds: selectedChildIds,
-      }));
-
-      // 3) 保存
-      await Promise.all(tasks.map(t => addTask(t)));
-
+      // TODO: 実際のデータ保存機能はここで実装
+      console.log("保存機能は後で実装します", { extractedData, rawText, selectedChildIds });
+      
       navigate("/dashboard");
     } catch (e) {
       setError((e as Error).message);
@@ -157,6 +188,7 @@ const UploadPage: React.FC = () => {
   };
 
   const renderContent = () => {
+    console.log('renderContent called, current step:', step);
     switch (step) {
       case UploadStep.SelectFile:
         return <Uploader onFileSelect={handleFileSelect} />;
@@ -168,6 +200,7 @@ const UploadPage: React.FC = () => {
         return <Spinner text="AIが内容を読み取っています..." />;
 
       case UploadStep.Preview:
+        console.log('Rendering preview step, extractedData:', extractedData);
         return extractedData ? (
           <div className="space-y-6">
             <ExtractPreview data={extractedData} />
@@ -197,12 +230,12 @@ const UploadPage: React.FC = () => {
               </div>
             )}
 
-            {/* ログイン済みなら子ども選択UI（既存の実装を挿入） */}
-            {isAuthenticated && children.length > 0 && (
+            {/* ログイン済みなら子ども選択UI（後で実装予定） */}
+            {/* {isAuthenticated && children && Array.isArray(children) && children.length > 0 && (
               <div className="bg-white p-6 rounded-xl shadow-md">
-                {/* TODO: ここに既存の子供選択UIを配置 */}
+                <div>子ども選択UIをここに実装予定</div>
               </div>
-            )}
+            )} */}
 
             <div className="flex flex-col sm:flex-row gap-4">
               <Button onClick={handleReset} variant="secondary" disabled={isSubmitting}>

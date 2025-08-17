@@ -1,7 +1,9 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { User, onAuthStateChanged, signOut } from 'firebase/auth';
-import { auth } from '@/services/firebase';
-import { UserService, UserProfile } from '@/services/userService';
+import { User, onAuthStateChanged, signOut, updateProfile } from 'firebase/auth';
+import { auth } from './services/firebase';
+import { UserService, UserProfile } from './services/userService';
+import * as authService from './services/authService';
+import { User as AppUser } from './types';
 
 interface AppContextType {
   // 認証状態
@@ -22,6 +24,8 @@ interface AppContextType {
   logout: () => Promise<void>;
   refreshUsage: () => Promise<void>;
   refreshProfile: () => Promise<void>;
+  signup: (userData: AppUser, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType>({} as AppContextType);
@@ -51,10 +55,10 @@ export const EnhancedAppContextProvider: React.FC<{ children: React.ReactNode }>
     }
 
     try {
-      const usage = await UserService.checkUsageLimit(user.uid);
-      setUsageInfo(usage);
+      const usageData = await UserService.checkUsageLimit(user.uid);
+      setUsageInfo(usageData);
     } catch (error) {
-      console.error('Failed to refresh usage info:', error);
+      console.error('使用量情報の更新に失敗:', error);
       setUsageInfo(null);
     }
   };
@@ -84,7 +88,29 @@ export const EnhancedAppContextProvider: React.FC<{ children: React.ReactNode }>
       setUsageInfo(null);
       setIsAuthenticated(false);
     } catch (error) {
-      console.error('Logout failed:', error);
+      console.error('ログアウトに失敗:', error);
+    }
+  };
+
+  // サインアップ
+  const signup = async (userData: AppUser, password: string) => {
+    try {
+      await authService.signup(userData, password);
+      // Firebase認証の状態変更により、自動的にuseEffectが実行されてユーザー情報が更新される
+    } catch (error) {
+      console.error('サインアップに失敗:', error);
+      throw error; // エラーをUIに伝播
+    }
+  };
+
+  // ログイン
+  const login = async (email: string, password: string) => {
+    try {
+      await authService.login(email, password);
+      // Firebase認証の状態変更により、自動的にuseEffectが実行されてユーザー情報が更新される
+    } catch (error) {
+      console.error('ログインに失敗:', error);
+      throw error; // エラーをUIに伝播
     }
   };
 
@@ -131,7 +157,9 @@ export const EnhancedAppContextProvider: React.FC<{ children: React.ReactNode }>
     usageInfo,
     logout,
     refreshUsage,
-    refreshProfile
+    refreshProfile,
+    signup,
+    login
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

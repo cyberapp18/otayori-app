@@ -1,11 +1,11 @@
 
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useAppContext } from '@/EnhancedAppContext';
-import Button from '@/components/Button';
-import { User } from '@/types';
-import { countries, japanPrefectures } from '@/constants/locations';
-import { sanitize } from '@/services/sanitization';
+import { useAppContext } from '../AppContext';
+import Button from '../components/Button';
+import { User } from '../types';
+import { countries, japanPrefectures } from '../constants/locations';
+import { sanitize } from '../services/sanitization';
 
 const SignUpPage: React.FC = () => {
   const [formData, setFormData] = useState({

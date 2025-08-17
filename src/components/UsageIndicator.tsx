@@ -1,5 +1,5 @@
 import React from 'react';
-import { useAppContext } from '@/NewAppContext';
+import { useAppContext } from '../AppContext';
 import { Link } from 'react-router-dom';
 
 const UsageIndicator: React.FC = () => {

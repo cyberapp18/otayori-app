@@ -1,5 +1,5 @@
-import { User } from '@/types';
-import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, User as FirebaseAuthUser } from 'firebase/auth';
+import { User } from '../types';
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, updateProfile, User as FirebaseAuthUser } from 'firebase/auth';
 import { getFirestore, doc, setDoc } from 'firebase/firestore';
 import { getApp } from 'firebase/app';
 
@@ -8,19 +8,32 @@ import { getApp } from 'firebase/app';
 
 export const signup = async (user: User, password: string): Promise<void> => {
   try {
-    const auth = getAuth(getApp()); // 関数が呼び出されたときに取得
-    const db = getFirestore(getApp()); // 関数が呼び出されたときに取得
+    const auth = getAuth(getApp());
+    const db = getFirestore(getApp());
 
     const userCredential = await createUserWithEmailAndPassword(auth, user.email, password);
     const firebaseUser = userCredential.user;
 
-    await setDoc(doc(db, 'users', firebaseUser.uid), {
-      username: user.username,
+    // displayNameを設定
+    await updateProfile(firebaseUser, {
+      displayName: user.username
+    });
+
+    // Stripe Extensions互換のcustomersコレクションに保存
+    await setDoc(doc(db, 'customers', firebaseUser.uid), {
+      displayName: user.username,
       email: user.email,
-      birthdate: user.birthdate,
-      country: user.country,
-      location: user.location,
-      createdAt: new Date().toISOString(),
+      planType: 'free',
+      monthlyLimit: 5,
+      currentMonthUsage: 0,
+      lastResetDate: new Date(),
+      createdAt: new Date(),
+      // 追加のユーザー情報
+      profile: {
+        birthdate: user.birthdate,
+        country: user.country,
+        location: user.location,
+      }
     });
 
     console.log("User signed up successfully and profile saved to Firestore:", firebaseUser.email);

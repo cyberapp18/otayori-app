@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { UploadIcon, BellIcon, CalendarIcon, CheckCircleIcon, StarIcon } from '@/components/Icon';
-import { BRAND, COPY } from '@/constants/brand';
+import { UploadIcon, BellIcon, CalendarIcon, CheckCircleIcon, StarIcon } from '../components/Icon';
+import { BRAND, COPY } from '../constants/brand';
 
 const LandingPage: React.FC = () => {
   const features = [

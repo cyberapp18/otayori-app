@@ -1,6 +1,6 @@
 // components/ExtractPreview.tsx
 import React from 'react';
-import type { ClassNewsletterSchema } from '@/types/index';
+import type { ClassNewsletterSchema } from '../types';
 import ConfidenceBadge from './ConfidenceBadge';
 import { CheckCircleIcon } from './Icon';
 

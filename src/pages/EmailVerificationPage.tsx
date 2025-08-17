@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { CheckCircleIcon } from '@/components/Icon';
+import { CheckCircleIcon } from '../components/Icon';
 
 const EmailVerificationPage: React.FC = () => {
   return (
