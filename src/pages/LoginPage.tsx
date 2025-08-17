@@ -19,7 +19,7 @@ const LoginPage: React.FC = () => {
     setIsLoading(true);
     try {
       await login(sanitize(email), password);
-      navigate('/');
+      navigate('/dashboard');
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -28,7 +28,7 @@ const LoginPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-orange-50 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen flex items-center justify-center bg-orange-50 px-4 sm:px-6 lg:px-8 pb-20 md:pb-8">
       <div className="max-w-md w-full space-y-8">
         <div>
           <h1 className="text-center text-3xl font-extrabold text-orange-600">

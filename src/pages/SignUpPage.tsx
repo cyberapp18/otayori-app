@@ -1,13 +1,17 @@
 
 import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAppContext } from '../AppContext';
+import { FamilyService } from '../services/familyService';
 import Button from '../components/Button';
 import { User } from '../types';
 import { countries, japanPrefectures } from '../constants/locations';
 import { sanitize } from '../services/sanitization';
 
 const SignUpPage: React.FC = () => {
+  const [searchParams] = useSearchParams();
+  const inviteCode = searchParams.get('inviteCode');
+  
   const [formData, setFormData] = useState({
     username: '',
     email: '',
@@ -23,6 +27,7 @@ const SignUpPage: React.FC = () => {
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [inviteInfo, setInviteInfo] = useState<any>(null);
   const { signup } = useAppContext();
   const navigate = useNavigate();
   
@@ -48,12 +53,34 @@ const SignUpPage: React.FC = () => {
 
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+    
+    // ニックネームは10文字以内に制限
+    if (name === 'username' && value.length > 10) {
+      return;
+    }
+    
+    setFormData({ ...formData, [name]: value });
   };
   
   const handleBirthdateChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     setBirthdate({ ...birthdate, [e.target.name]: e.target.value });
   };
+
+  // 招待コードがある場合、招待情報を取得
+  useEffect(() => {
+    if (inviteCode) {
+      const fetchInviteInfo = async () => {
+        try {
+          const invite = await FamilyService.getInviteByCode(inviteCode);
+          setInviteInfo(invite);
+        } catch (error) {
+          console.error('招待情報取得エラー:', error);
+        }
+      };
+      fetchInviteInfo();
+    }
+  }, [inviteCode]);
 
   const handleCountryChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
       setFormData({ ...formData, country: e.target.value, location: '' });
@@ -88,6 +115,12 @@ const SignUpPage: React.FC = () => {
         return;
     }
     
+    // ニックネームの文字数チェック
+    if (formData.username.length > 10) {
+      setError('ニックネームは10文字以内で入力してください。');
+      return;
+    }
+    
     if (!agreedToTerms) {
       setError('利用規約とプライバシーポリシーに同意してください。');
       return;
@@ -114,7 +147,24 @@ const SignUpPage: React.FC = () => {
         birthdate: formattedBirthdate,
       };
 
-      await signup(sanitizedUser, password);
+      const userCredential = await signup(sanitizedUser, password);
+      
+      // 招待コードがある場合は招待を受け入れ
+      if (inviteCode && userCredential?.user) {
+        try {
+          await FamilyService.acceptInvite(inviteCode, userCredential.user.uid);
+          // 家族参加成功時はダッシュボードに直接遷移
+          navigate('/dashboard', { 
+            replace: true,
+            state: { message: '家族への参加が完了しました！アカウント登録とメールアドレスの確認も完了してください。' }
+          });
+          return;
+        } catch (inviteError) {
+          console.error('招待受け入れエラー:', inviteError);
+          // 招待受け入れに失敗してもサインアップは成功しているので通常の流れに進む
+        }
+      }
+      
       navigate('/verify-email');
     } catch (err) {
       setError((err as Error).message);
@@ -124,7 +174,7 @@ const SignUpPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-orange-50 py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen flex items-center justify-center bg-orange-50 py-12 px-4 sm:px-6 lg:px-8 pb-20 md:pb-8">
       <div className="max-w-md w-full space-y-8">
         <div>
           <h1 className="text-center text-3xl font-extrabold text-orange-600">
@@ -135,6 +185,21 @@ const SignUpPage: React.FC = () => {
           </p>
         </div>
         <form className="mt-8 space-y-6 bg-white p-8 rounded-2xl shadow-lg" onSubmit={handleSubmit}>
+          {/* 招待情報表示 */}
+          {inviteInfo && (
+            <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <div className="flex items-center">
+                <div className="text-blue-500 text-2xl mr-3">👨‍👩‍👧‍👦</div>
+                <div>
+                  <p className="text-sm font-medium text-blue-800">家族招待でのサインアップ</p>
+                  <p className="text-xs text-blue-600">
+                    {inviteInfo.familyName || '家族'}に招待されています
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+          
           {error && (
             <div className="p-3 bg-red-100 border border-red-300 text-red-800 rounded-lg text-sm">
               {error}
@@ -144,7 +209,7 @@ const SignUpPage: React.FC = () => {
             <div>
                 <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-1">ニックネーム</label>
                 <input id="username" name="username" type="text" required className="w-full px-3 py-2 border border-gray-300 rounded-md placeholder-gray-500 focus:outline-none focus:ring-orange-500 focus:border-orange-500" placeholder="例：おたより花子" value={formData.username} onChange={handleChange} />
-                <p className="mt-1 text-xs text-gray-500 px-1">アプリ内で表示される名前です。好きなニックネームを自由に設定してください。</p>
+                <p className="mt-1 text-xs text-gray-500 px-1">アプリ内で表示される名前です（10文字以内）。好きなニックネームを自由に設定してください。</p>
             </div>
             <div>
                 <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">メールアドレス</label>

@@ -269,7 +269,7 @@ const UploadPage: React.FC = () => {
     }
   };
 
-  return <div className="max-w-2xl mx-auto">{renderContent()}</div>;
+  return <div className="max-w-2xl mx-auto pb-20 md:pb-8">{renderContent()}</div>;
 };
 
 export default UploadPage;

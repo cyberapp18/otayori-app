@@ -2,8 +2,9 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User, onAuthStateChanged, signOut, updateProfile } from 'firebase/auth';
 import { auth } from './services/firebase';
 import { UserService, UserProfile } from './services/userService';
+import { FamilyService } from './services/familyService';
 import * as authService from './services/authService';
-import { User as AppUser } from './types';
+import { User as AppUser, Family } from './types';
 
 interface AppContextType {
   // 認証状態
@@ -20,10 +21,15 @@ interface AppContextType {
     needsUpgrade: boolean;
   } | null;
   
+  // 家族管理
+  family: Family | null;
+  familyLoading: boolean;
+  
   // アクション
   logout: () => Promise<void>;
   refreshUsage: () => Promise<void>;
   refreshProfile: () => Promise<void>;
+  refreshFamily: () => Promise<void>;
   signup: (userData: AppUser, password: string) => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
 }
@@ -46,6 +52,53 @@ export const EnhancedAppContextProvider: React.FC<{ children: React.ReactNode }>
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [usageInfo, setUsageInfo] = useState<AppContextType['usageInfo']>(null);
+  
+  // 家族管理状態
+  const [family, setFamily] = useState<Family | null>(null);
+  const [familyLoading, setFamilyLoading] = useState(false);
+
+  // 家族情報を更新
+  const refreshFamily = async () => {
+    console.log('refreshFamily 開始');
+    console.log('user:', user);
+    
+    if (!user) {
+      console.log('ユーザーなし、家族情報をクリア');
+      setFamily(null);
+      setFamilyLoading(false);
+      return;
+    }
+
+    try {
+      setFamilyLoading(true);
+      console.log('家族情報読み込み開始');
+      
+      // ユーザープロフィールを再取得（家族情報が更新されている可能性があるため）
+      console.log('プロフィール再取得中...');
+      await refreshProfile();
+      
+      // 最新のユーザープロフィールを取得
+      console.log('最新プロフィール取得中...');
+      const latestProfile = await UserService.getUserProfile(user.uid);
+      console.log('最新プロフィール:', latestProfile);
+      
+      if (latestProfile?.familyId) {
+        console.log('家族ID見つかった:', latestProfile.familyId);
+        const familyData = await FamilyService.getFamily(latestProfile.familyId);
+        console.log('家族データ:', familyData);
+        setFamily(familyData);
+      } else {
+        console.log('家族IDなし');
+        setFamily(null);
+      }
+    } catch (error) {
+      console.error('家族情報の更新に失敗:', error);
+      setFamily(null);
+    } finally {
+      setFamilyLoading(false);
+      console.log('refreshFamily 完了');
+    }
+  };
 
   // 使用量情報を更新
   const refreshUsage = async () => {
@@ -133,14 +186,30 @@ export const EnhancedAppContextProvider: React.FC<{ children: React.ReactNode }>
           // 使用量情報取得
           const usage = await UserService.checkUsageLimit(user.uid);
           setUsageInfo(usage);
+          
+          // 家族情報取得（familyIdがある場合）
+          if (profile?.familyId) {
+            try {
+              setFamilyLoading(true);
+              const familyData = await FamilyService.getFamily(profile.familyId);
+              setFamily(familyData);
+            } catch (error) {
+              console.error('Failed to load family data:', error);
+              setFamily(null);
+            } finally {
+              setFamilyLoading(false);
+            }
+          }
         } catch (error) {
           console.error('Failed to initialize user data:', error);
           setUserProfile(null);
           setUsageInfo(null);
+          setFamily(null);
         }
       } else {
         setUserProfile(null);
         setUsageInfo(null);
+        setFamily(null);
       }
 
       setIsLoading(false);
@@ -155,9 +224,12 @@ export const EnhancedAppContextProvider: React.FC<{ children: React.ReactNode }>
     isAuthenticated,
     isLoading,
     usageInfo,
+    family,
+    familyLoading,
     logout,
     refreshUsage,
     refreshProfile,
+    refreshFamily,
     signup,
     login
   };

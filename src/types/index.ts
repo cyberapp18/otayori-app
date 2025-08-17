@@ -79,19 +79,78 @@ export interface Task {
   childIds?: string[]; // New: Associated child IDs
 }
 
+// 家族管理の型定義
+
+export interface FamilyMember {
+  role: 'owner' | 'parent' | 'child';
+  name: string;
+  joinedAt: string;
+  permissions: {
+    canInvite: boolean;
+    canManageChildren: boolean;
+    canViewAll: boolean;
+  };
+}
+
+export interface FamilyChild {
+  name: string;
+  grade?: string; // 年齢（数値のみ、例：「6」）
+  school?: string; // 学校・園名
+  userId?: string | null;
+  parentId: string;
+  isRegistered: boolean;
+  inviteCode?: string | null;
+  createdAt: string;
+}
+
+export interface FamilyInvite {
+  type: 'family' | 'child';
+  targetChildId?: string | null;
+  invitedBy: string;
+  email?: string | null;
+  code: string;
+  method: 'qr' | 'email' | 'line';
+  createdAt: string;
+  expiresAt: string;
+  used: boolean;
+  usedBy?: string | null;
+  usedAt?: string | null;
+}
+
+export interface FamilySettings {
+  shareNotices: boolean;
+  shareTasks: boolean;
+  autoShare: boolean;
+}
+
+export interface Family {
+  id: string;
+  ownerId: string;
+  members: { [userId: string]: FamilyMember };
+  children: { [childId: string]: FamilyChild };
+  invites: { [inviteId: string]: FamilyInvite };
+  settings: FamilySettings;
+  onboardingStep: number;
+  onboardingCompleted: boolean;
+  maxMembers: number;
+  maxChildren: number;
+  createdAt: string;
+}
+
+export interface ChildProfile {
+  parentId: string;
+  childId: string;
+  grade?: string;
+  school?: string;
+}
+
+// 既存のChild型を更新
 export interface Child {
   id: string;
   familyId: string;
   name: string;
   age: number;
   createdAt: string;
-}
-
-export interface Family {
-    id: string;
-    name: string;
-    members: string[]; // This would hold user IDs
-    createdAt: string;
 }
 
 export interface User {

@@ -21,7 +21,11 @@ export interface UserProfile {
   monthlyLimit: number;
   currentMonthUsage: number;
   lastResetDate: Date;
-  familyRole?: 'owner' | 'member';
+  
+  // 家族管理フィールド
+  familyId?: string;
+  familyRole?: 'owner' | 'parent' | 'child';
+  hasCompletedFamilyOnboarding?: boolean;
 }
 
 export class UserService {
@@ -69,13 +73,19 @@ export class UserService {
    */
   static async getUserProfile(userId: string): Promise<UserProfile | null> {
     try {
+      console.log('getUserProfile 開始, userId:', userId);
       const userRef = doc(db, 'customers', userId);
       const userSnap = await getDoc(userRef);
       
-      if (!userSnap.exists()) return null;
+      if (!userSnap.exists()) {
+        console.log('ユーザープロフィールが存在しません');
+        return null;
+      }
       
       const data = userSnap.data();
-      return {
+      console.log('Firestoreから取得したデータ:', data);
+      
+      const profile = {
         uid: data.uid,
         email: data.email,
         displayName: data.displayName,
@@ -87,8 +97,15 @@ export class UserService {
         monthlyLimit: data.monthlyLimit || 5,
         currentMonthUsage: data.currentMonthUsage || 0,
         lastResetDate: data.lastResetDate?.toDate() || new Date(),
-        familyRole: data.familyRole || 'owner'
+        
+        // 家族管理フィールド（重要！）
+        familyId: data.familyId,
+        familyRole: data.familyRole,
+        hasCompletedFamilyOnboarding: data.hasCompletedFamilyOnboarding
       } as UserProfile;
+      
+      console.log('構築したプロフィール:', profile);
+      return profile;
     } catch (error) {
       console.error('Error fetching user profile:', error);
       return null;
@@ -179,6 +196,98 @@ export class UserService {
     await updateDoc(userRef, {
       planType: plan,
       monthlyLimit: limits[plan],
+      updatedAt: serverTimestamp()
+    });
+  }
+
+  /**
+   * 家族情報を更新
+   */
+  static async updateFamilyInfo(
+    userId: string, 
+    familyId: string, 
+    familyRole: 'owner' | 'parent' | 'child'
+  ): Promise<void> {
+    try {
+      console.log('UserService.updateFamilyInfo 開始');
+      console.log('userId:', userId);
+      console.log('familyId:', familyId);
+      console.log('familyRole:', familyRole);
+      
+      const userRef = doc(db, 'customers', userId);
+      console.log('ユーザープロフィール更新中...');
+      
+      await updateDoc(userRef, {
+        familyId,
+        familyRole,
+        updatedAt: serverTimestamp()
+      });
+      
+      console.log('UserService.updateFamilyInfo 完了');
+    } catch (error) {
+      console.error('UserService.updateFamilyInfo エラー:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 家族オンボーディング完了フラグを更新
+   */
+  static async updateFamilyOnboardingStatus(
+    userId: string, 
+    completed: boolean
+  ): Promise<void> {
+    const userRef = doc(db, 'customers', userId);
+    await updateDoc(userRef, {
+      hasCompletedFamilyOnboarding: completed,
+      updatedAt: serverTimestamp()
+    });
+  }
+
+  /**
+   * ユーザープロフィール更新
+   */
+  static async updateUserProfile(userId: string, updates: {
+    displayName?: string;
+    email?: string;
+  }): Promise<void> {
+    const userRef = doc(db, 'customers', userId);
+    await updateDoc(userRef, {
+      ...updates,
+      updatedAt: serverTimestamp()
+    });
+  }
+
+  /**
+   * プラン変更
+   */
+  static async changePlan(userId: string, planType: 'free' | 'standard' | 'pro'): Promise<void> {
+    const userRef = doc(db, 'customers', userId);
+    
+    // プランごとの制限設定
+    const planSettings = {
+      free: { monthlyLimit: 4, planType: 'free' },
+      standard: { monthlyLimit: 30, planType: 'standard' },
+      pro: { monthlyLimit: 200, planType: 'pro' }
+    };
+    
+    const settings = planSettings[planType];
+    
+    await updateDoc(userRef, {
+      planType: settings.planType,
+      monthlyLimit: settings.monthlyLimit,
+      updatedAt: serverTimestamp()
+    });
+  }
+
+  /**
+   * アカウント削除（論理削除）
+   */
+  static async deleteAccount(userId: string): Promise<void> {
+    const userRef = doc(db, 'customers', userId);
+    await updateDoc(userRef, {
+      isActive: false,
+      deletedAt: serverTimestamp(),
       updatedAt: serverTimestamp()
     });
   }
