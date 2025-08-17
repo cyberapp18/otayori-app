@@ -3,6 +3,8 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { EnhancedAppContextProvider, useAppContext } from './AppContext';
 import Header from './components/Header';
 import Footer from './components/Footer';
+import ScrollToTop from './components/ScrollToTop';
+import ScrollRestoration from './components/ScrollRestoration';
 import DashboardPage from './pages/DashboardPage';
 import LoginPage from './pages/LoginPage';
 import SignUpPage from './pages/SignUpPage';
@@ -65,61 +67,77 @@ const PublicRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 };
 
 const App: React.FC = () => {
+  // グローバルなスクロール制御を設定
+  React.useEffect(() => {
+    // スクロール動作を無効化（即座にスクロール）
+    document.documentElement.style.scrollBehavior = 'auto';
+    document.body.style.scrollBehavior = 'auto';
+    
+    return () => {
+      // クリーンアップ
+      document.documentElement.style.scrollBehavior = '';
+      document.body.style.scrollBehavior = '';
+    };
+  }, []);
+
   return (
     <EnhancedAppContextProvider>
       <Router>
-        <div className="min-h-screen bg-cream pb-20 md:pb-0 flex flex-col">
-          <Header />
-          <main className="pt-20 md:pt-24 flex-1">
-            <Routes>
-              {/* ホームページ（認証状態に応じて分岐） */}
-              <Route path="/" element={<HomePage />} />
-              {/* 明示的なランディングページ（ヘッダーから直接アクセス用） */}
-              <Route path="/landing" element={<LandingPage />} />
-              <Route path="/privacy" element={<PrivacyPolicyPage />} />
-              <Route path="/terms" element={<TermsPage />} />
-              
-              {/* 招待ページ（認証不要） */}
-              <Route path="/invite/:inviteCode" element={<InvitePage />} />
-              
-              {/* 未認証時のみ */}
-              <Route path="/login" element={
-                <PublicRoute>
-                  <LoginPage />
-                </PublicRoute>
-              } />
-              <Route path="/signup" element={
-                <PublicRoute>
-                  <SignUpPage />
-                </PublicRoute>
-              } />
-              <Route path="/verify-email" element={<EmailVerificationPage />} />
-              
-              {/* 認証が必要なページ */}
-              <Route path="/dashboard" element={<DashboardPage />} />
-              
-              {/* アップロードページは未ログインでもアクセス可能 */}
-              <Route path="/upload" element={<UploadPage />} />
-              <Route path="/notice/:id" element={
-                <ProtectedRoute>
-                  <NoticeDetailPage />
-                </ProtectedRoute>
-              } />
-              <Route path="/settings" element={
-                <ProtectedRoute>
-                  <SettingsPage />
-                </ProtectedRoute>
-              } />
-              
-              {/* フッター用の新しいページ */}
-              <Route path="/contact" element={<ContactPage />} />
-              <Route path="/bug-report" element={<BugReportPage />} />
-              <Route path="/legal" element={<LegalPage />} />
-              <Route path="/data-policy" element={<DataPolicyPage />} />
-            </Routes>
-          </main>
-          <Footer />
-        </div>
+        <ScrollToTop />
+        <ScrollRestoration>
+          <div className="min-h-screen bg-cream pb-20 md:pb-0 flex flex-col" style={{ scrollBehavior: 'auto' }}>
+            <Header />
+            <main className="pt-20 md:pt-24 flex-1" style={{ scrollBehavior: 'auto' }}>
+              <Routes>
+                {/* ホームページ（認証状態に応じて分岐） */}
+                <Route path="/" element={<HomePage />} />
+                {/* 明示的なランディングページ（ヘッダーから直接アクセス用） */}
+                <Route path="/landing" element={<LandingPage />} />
+                <Route path="/privacy" element={<PrivacyPolicyPage />} />
+                <Route path="/terms" element={<TermsPage />} />
+                
+                {/* 招待ページ（認証不要） */}
+                <Route path="/invite/:inviteCode" element={<InvitePage />} />
+                
+                {/* 未認証時のみ */}
+                <Route path="/login" element={
+                  <PublicRoute>
+                    <LoginPage />
+                  </PublicRoute>
+                } />
+                <Route path="/signup" element={
+                  <PublicRoute>
+                    <SignUpPage />
+                  </PublicRoute>
+                } />
+                <Route path="/verify-email" element={<EmailVerificationPage />} />
+                
+                {/* 認証が必要なページ */}
+                <Route path="/dashboard" element={<DashboardPage />} />
+                
+                {/* アップロードページは未ログインでもアクセス可能 */}
+                <Route path="/upload" element={<UploadPage />} />
+                <Route path="/notice/:id" element={
+                  <ProtectedRoute>
+                    <NoticeDetailPage />
+                  </ProtectedRoute>
+                } />
+                <Route path="/settings" element={
+                  <ProtectedRoute>
+                    <SettingsPage />
+                  </ProtectedRoute>
+                } />
+                
+                {/* フッター用の新しいページ */}
+                <Route path="/contact" element={<ContactPage />} />
+                <Route path="/bug-report" element={<BugReportPage />} />
+                <Route path="/legal" element={<LegalPage />} />
+                <Route path="/data-policy" element={<DataPolicyPage />} />
+              </Routes>
+            </main>
+            <Footer />
+          </div>
+        </ScrollRestoration>
       </Router>
     </EnhancedAppContextProvider>
   );

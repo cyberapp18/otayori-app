@@ -21,6 +21,31 @@ const Header: React.FC = () => {
     navigate('/landing');
   };
 
+  const handleNavigation = () => {
+    // ナビゲーション時にスクロール位置をリセット（より確実な方法）
+    
+    // 即座にスクロール
+    window.scrollTo(0, 0);
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+    
+    // 少し遅延させてもう一度
+    setTimeout(() => {
+      window.scrollTo(0, 0);
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
+    }, 0);
+    
+    // さらに遅延させて確実に
+    setTimeout(() => {
+      window.scrollTo({
+        top: 0,
+        left: 0,
+        behavior: 'auto'
+      });
+    }, 50);
+  };
+
   return (
     <>
       <header className="bg-white/80 backdrop-blur-sm fixed top-0 left-0 right-0 z-50 shadow-sm">
@@ -74,18 +99,21 @@ const Header: React.FC = () => {
                   <NavLink 
                     to={homeLink} 
                     end 
+                    onClick={handleNavigation}
                     className={({ isActive }) => `px-3 py-2 rounded-md text-sm font-medium transition-colors ${isActive ? activeLinkClass : inactiveLinkClass}`}
                   >
                     ダッシュボード
                   </NavLink>
                   <NavLink 
                     to="/upload" 
+                    onClick={handleNavigation}
                     className={({ isActive }) => `px-3 py-2 rounded-md text-sm font-medium transition-colors ${isActive ? activeLinkClass : inactiveLinkClass}`}
                   >
                     アップロード
                   </NavLink>
                   <NavLink 
                     to="/settings" 
+                    onClick={handleNavigation}
                     className={({ isActive }) => `px-3 py-2 rounded-md text-sm font-medium transition-colors ${isActive ? activeLinkClass : inactiveLinkClass}`}
                   >
                     設定
@@ -114,15 +142,28 @@ const Header: React.FC = () => {
       {/* Mobile Bottom Nav - Only for authenticated users */}
       {isAuthenticated && (
         <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 flex justify-around z-50 h-16">
-              <NavLink to={homeLink} end className={({ isActive }) => `flex flex-col items-center justify-center p-2 w-full ${isActive ? 'text-orange-600' : 'text-gray-500'}`}>
+              <NavLink 
+                to={homeLink} 
+                end 
+                onClick={handleNavigation}
+                className={({ isActive }) => `flex flex-col items-center justify-center p-2 w-full ${isActive ? 'text-orange-600' : 'text-gray-500'}`}
+              >
                   <DashboardIcon className="w-6 h-6" />
                   <span className="text-xs">ダッシュボード</span>
               </NavLink>
-              <NavLink to="/upload" className={({ isActive }) => `flex flex-col items-center justify-center p-2 w-full ${isActive ? 'text-orange-600' : 'text-gray-500'}`}>
+              <NavLink 
+                to="/upload" 
+                onClick={handleNavigation}
+                className={({ isActive }) => `flex flex-col items-center justify-center p-2 w-full ${isActive ? 'text-orange-600' : 'text-gray-500'}`}
+              >
                   <UploadIcon className="w-6 h-6" />
                   <span className="text-xs">アップロード</span>
               </NavLink>
-              <NavLink to="/settings" className={({ isActive }) => `flex flex-col items-center justify-center p-2 w-full ${isActive ? 'text-orange-600' : 'text-gray-500'}`}>
+              <NavLink 
+                to="/settings" 
+                onClick={handleNavigation}
+                className={({ isActive }) => `flex flex-col items-center justify-center p-2 w-full ${isActive ? 'text-orange-600' : 'text-gray-500'}`}
+              >
                   <SettingsIcon className="w-6 h-6" />
                   <span className="text-xs">設定</span>
               </NavLink>

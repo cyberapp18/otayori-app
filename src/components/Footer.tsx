@@ -2,6 +2,28 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 
 const Footer: React.FC = () => {
+  const handleNavigation = () => {
+    // リンククリック時にスクロール位置をリセット（より確実な方法）
+    // 複数の方法を組み合わせて確実にスクロールをリセット
+    
+    // 即座にスクロール
+    window.scrollTo(0, 0);
+    
+    // 少し遅延させてもう一度（レンダリング後）
+    setTimeout(() => {
+      window.scrollTo(0, 0);
+    }, 0);
+    
+    // さらに遅延させて確実に
+    setTimeout(() => {
+      window.scrollTo({
+        top: 0,
+        left: 0,
+        behavior: 'auto'
+      });
+    }, 100);
+  };
+
   return (
     <footer className="bg-gray-50 border-t border-gray-200 mt-auto mb-16 md:mb-0">
       <div className="max-w-6xl mx-auto px-4 py-8">
@@ -13,6 +35,7 @@ const Footer: React.FC = () => {
               <li>
                 <Link 
                   to="/dashboard" 
+                  onClick={handleNavigation}
                   className="hover:text-orange-600 transition-colors"
                 >
                   ダッシュボード
@@ -21,6 +44,7 @@ const Footer: React.FC = () => {
               <li>
                 <Link 
                   to="/upload" 
+                  onClick={handleNavigation}
                   className="hover:text-orange-600 transition-colors"
                 >
                   アップロード
@@ -29,6 +53,7 @@ const Footer: React.FC = () => {
               <li>
                 <Link 
                   to="/settings" 
+                  onClick={handleNavigation}
                   className="hover:text-orange-600 transition-colors"
                 >
                   設定
@@ -44,6 +69,7 @@ const Footer: React.FC = () => {
               <li>
                 <Link 
                   to="/contact" 
+                  onClick={handleNavigation}
                   className="hover:text-orange-600 transition-colors"
                 >
                   お問い合わせフォーム
@@ -52,6 +78,7 @@ const Footer: React.FC = () => {
               <li>
                 <Link 
                   to="/bug-report" 
+                  onClick={handleNavigation}
                   className="hover:text-orange-600 transition-colors"
                 >
                   不具合報告
@@ -67,6 +94,7 @@ const Footer: React.FC = () => {
               <li>
                 <Link 
                   to="/terms" 
+                  onClick={handleNavigation}
                   className="hover:text-orange-600 transition-colors"
                 >
                   利用規約
@@ -75,6 +103,7 @@ const Footer: React.FC = () => {
               <li>
                 <Link 
                   to="/privacy" 
+                  onClick={handleNavigation}
                   className="hover:text-orange-600 transition-colors"
                 >
                   プライバシーポリシー
@@ -83,6 +112,7 @@ const Footer: React.FC = () => {
               <li>
                 <Link 
                   to="/legal" 
+                  onClick={handleNavigation}
                   className="hover:text-orange-600 transition-colors"
                 >
                   特定商取引法に基づく表記
@@ -91,6 +121,7 @@ const Footer: React.FC = () => {
               <li>
                 <Link 
                   to="/data-policy" 
+                  onClick={handleNavigation}
                   className="hover:text-orange-600 transition-colors"
                 >
                   個人情報の取り扱いについて
