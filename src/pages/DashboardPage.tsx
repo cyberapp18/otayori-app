@@ -271,7 +271,7 @@ const DashboardPage: React.FC = () => {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-8 mb-8">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
           {/* アクションカード */}
           <div className="lg:col-span-1">
             <div className="grid grid-cols-1 gap-6">
@@ -343,7 +343,7 @@ const DashboardPage: React.FC = () => {
           </div>
 
           {/* TODOリスト */}
-          <div className="lg:col-span-3">
+          <div className="lg:col-span-2">
             <div className="bg-white rounded-lg shadow-md p-6">
               {/* 新規TODO追加フォーム */}
               <form onSubmit={handleAddTodo} className="mb-6 space-y-3 border-b pb-4">
