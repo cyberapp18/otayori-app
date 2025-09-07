@@ -18,7 +18,7 @@ const LegalPage: React.FC = () => {
                 販売事業者の名称
               </h2>
               <p className="text-gray-700">
-                [事業者名を記載]<br />
+                ウィズハッカー<br />
                 代表者: 大久保佑
               </p>
             </section>

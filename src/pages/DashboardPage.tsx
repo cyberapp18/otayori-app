@@ -271,7 +271,7 @@ const DashboardPage: React.FC = () => {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-8 mb-8">
           {/* アクションカード */}
           <div className="lg:col-span-1">
             <div className="grid grid-cols-1 gap-6">
@@ -293,54 +293,57 @@ const DashboardPage: React.FC = () => {
                   </div>
                 </div>
               </Link>
+            </div>
+          </div>
 
-              <div className="bg-white rounded-lg shadow-md p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center">
-                    <div className="bg-blue-100 p-3 rounded-lg">
-                      <BellIcon className="h-6 w-6 text-blue-600" />
-                    </div>
-                    <div className="ml-4">
-                      <h3 className="text-lg font-semibold text-gray-900">通知</h3>
-                      <p className="text-sm text-gray-600">
-                        {notifications.length > 0 ? `${notifications.length}件の新しい通知` : '新しい通知はありません'}
-                      </p>
-                    </div>
+          {/* 通知セクション */}
+          <div className="lg:col-span-1">
+            <div className="bg-white rounded-lg shadow-md p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center">
+                  <div className="bg-blue-100 p-3 rounded-lg">
+                    <BellIcon className="h-6 w-6 text-blue-600" />
+                  </div>
+                  <div className="ml-4">
+                    <h3 className="text-lg font-semibold text-gray-900">通知</h3>
+                    <p className="text-sm text-gray-600">
+                      {notifications.length > 0 ? `${notifications.length}件の新しい通知` : '新しい通知はありません'}
+                    </p>
                   </div>
                 </div>
-                {dataLoading ? (
-                  <div className="flex justify-center py-4">
-                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500"></div>
-                  </div>
-                ) : notifications.length > 0 ? (
-                  <div className="space-y-3 max-h-40 overflow-y-auto">
-                    {notifications.slice(0, 3).map((notification) => (
-                      <div key={notification.id} className="bg-blue-50 p-3 rounded-lg">
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1">
-                            <h4 className="text-sm font-semibold text-gray-800">{notification.title}</h4>
-                            <p className="text-xs text-gray-600 mt-1">{notification.message}</p>
-                          </div>
-                          <button 
-                            onClick={() => handleMarkNotificationRead(notification.id!)}
-                            className="text-blue-600 hover:text-blue-800 ml-2"
-                            title="既読にする"
-                          >
-                            <CheckIcon className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm text-gray-500 text-center py-4">新しい通知はありません</p>
-                )}
               </div>
+              {dataLoading ? (
+                <div className="flex justify-center py-4">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500"></div>
+                </div>
+              ) : notifications.length > 0 ? (
+                <div className="space-y-3 max-h-40 overflow-y-auto">
+                  {notifications.slice(0, 3).map((notification) => (
+                    <div key={notification.id} className="bg-blue-50 p-3 rounded-lg">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <h4 className="text-sm font-semibold text-gray-800">{notification.title}</h4>
+                          <p className="text-xs text-gray-600 mt-1">{notification.message}</p>
+                        </div>
+                        <button 
+                          onClick={() => handleMarkNotificationRead(notification.id!)}
+                          className="text-blue-600 hover:text-blue-800 ml-2"
+                          title="既読にする"
+                        >
+                          <CheckIcon className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-gray-500 text-center py-4">新しい通知はありません</p>
+              )}
             </div>
           </div>
 
           {/* TODOリスト */}
-          <div className="lg:col-span-1">
+          <div className="lg:col-span-3">
             <div className="bg-white rounded-lg shadow-md p-6">
               {/* 新規TODO追加フォーム */}
               <form onSubmit={handleAddTodo} className="mb-6 space-y-3 border-b pb-4">
@@ -361,7 +364,7 @@ const DashboardPage: React.FC = () => {
                   onChange={e => setNewTodoDescription(e.target.value)}
                   maxLength={200}
                 />
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2">
                   <input
                     type="date"
                     className="border border-gray-300 rounded px-3 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
@@ -378,14 +381,23 @@ const DashboardPage: React.FC = () => {
                       <option key={member.id} value={member.id}>{member.name}</option>
                     ))}
                   </select>
+                  <select
+                    className="border border-gray-300 rounded px-3 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                    value={newTodoPriority}
+                    onChange={e => setNewTodoPriority(e.target.value as 'low' | 'medium' | 'high')}
+                  >
+                    <option value="low">優先度: 低</option>
+                    <option value="medium">優先度: 中</option>
+                    <option value="high">優先度: 高</option>
+                  </select>
+                  <button
+                    type="submit"
+                    className="bg-orange-500 text-white rounded px-4 py-2 hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={addingTodo || !newTodoTitle.trim()}
+                  >
+                    {addingTodo ? '追加中...' : 'タスク追加'}
+                  </button>
                 </div>
-                <button
-                  type="submit"
-                  className="bg-orange-500 text-white rounded px-4 py-2 hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed w-full"
-                  disabled={addingTodo || !newTodoTitle.trim()}
-                >
-                  {addingTodo ? '追加中...' : 'タスク追加'}
-                </button>
               </form>
 
               <div className="flex items-center justify-between mb-4">
@@ -407,7 +419,7 @@ const DashboardPage: React.FC = () => {
                   <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-green-500"></div>
                 </div>
               ) : todos.length > 0 ? (
-                <div className="space-y-3 max-h-96 overflow-y-auto">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-h-96 overflow-y-auto">
                   {todos
                     .sort((a, b) => {
                       // 未完了タスクを上に、完了済みタスクを下に

@@ -24,6 +24,12 @@ const SettingsPage: React.FC = () => {
   const [childGrade, setChildGrade] = useState('');
   const [childSchool, setChildSchool] = useState('');
 
+  // 子ども編集状態
+  const [editingChildId, setEditingChildId] = useState<string | null>(null);
+  const [editChildName, setEditChildName] = useState('');
+  const [editChildGrade, setEditChildGrade] = useState('');
+  const [editChildSchool, setEditChildSchool] = useState('');
+
   // 招待関連の状態
   const [showInviteOptions, setShowInviteOptions] = useState(false);
   const [showInviteModal, setShowInviteModal] = useState(false);
@@ -44,6 +50,36 @@ const SettingsPage: React.FC = () => {
   const hasFamily = !!family;
   const canManageFamily = userProfile?.familyRole === 'owner' || userProfile?.familyRole === 'parent';
   const isStandardOrAbove = userProfile?.planType === 'standard' || userProfile?.planType === 'pro';
+
+  // プラン制限定義
+  const planLimits = {
+    free: { maxMembers: 3, maxChildren: 2 },
+    standard: { maxMembers: 6, maxChildren: 4 },
+    pro: { maxMembers: 10, maxChildren: 8 }
+  };
+
+  const currentPlan = userProfile?.planType || 'free';
+  const currentLimits = planLimits[currentPlan];
+
+  // 現在の家族メンバー数チェック
+  const getCurrentMemberCount = () => {
+    if (!family) return 0;
+    return Object.keys(family.members || {}).length;
+  };
+
+  const getCurrentChildrenCount = () => {
+    if (!family) return 0;
+    return Object.keys(family.children || {}).length;
+  };
+
+  // 招待可能かチェック
+  const canInviteMore = () => {
+    return getCurrentMemberCount() < currentLimits.maxMembers;
+  };
+
+  const canAddMoreChildren = () => {
+    return getCurrentChildrenCount() < currentLimits.maxChildren;
+  };
 
   // プロフィール更新処理
   const handleProfileSave = async () => {
@@ -266,9 +302,101 @@ const SettingsPage: React.FC = () => {
     }
   };
 
+  // 子どもの編集開始
+  const handleEditChild = (childId: string, child: FamilyChild) => {
+    setEditingChildId(childId);
+    setEditChildName(child.name);
+    setEditChildGrade(child.grade || '');
+    setEditChildSchool(child.school || '');
+  };
+
+  // 子どもの編集保存
+  const handleSaveChildEdit = async () => {
+    if (!family || !editingChildId || !editChildName.trim()) return;
+
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      await FamilyService.updateChild(family.id, editingChildId, {
+        name: sanitize(editChildName),
+        grade: editChildGrade || undefined,
+        school: editChildSchool || undefined
+      });
+
+      setEditingChildId(null);
+      setEditChildName('');
+      setEditChildGrade('');
+      setEditChildSchool('');
+
+      await refreshFamily();
+      
+    } catch (error) {
+      console.error('子ども更新エラー:', error);
+      setError('子どもの情報更新に失敗しました');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // 子どもの編集キャンセル
+  const handleCancelChildEdit = () => {
+    setEditingChildId(null);
+    setEditChildName('');
+    setEditChildGrade('');
+    setEditChildSchool('');
+  };
+
+  // 子どもの招待
+  const handleInviteChild = async (childId: string) => {
+    if (!family || !user) return;
+
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      const inviteCode = await FamilyService.createChildInvite(family.id, childId, user.uid);
+      const inviteUrl = `${window.location.origin}/invite/child/${inviteCode}`;
+      
+      await navigator.clipboard.writeText(inviteUrl);
+      alert('子ども用の招待リンクをクリップボードにコピーしました');
+      
+    } catch (error) {
+      console.error('子ども招待エラー:', error);
+      setError('子どもの招待に失敗しました');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // 子どもの削除
+  const handleDeleteChild = async (childId: string, childName: string) => {
+    if (!family || !window.confirm(`${childName}を削除しますか？`)) return;
+
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      await FamilyService.removeChild(family.id, childId);
+      await refreshFamily();
+      
+    } catch (error) {
+      console.error('子ども削除エラー:', error);
+      setError('子どもの削除に失敗しました');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   // 招待メール処理
   const handleEmailInvite = async () => {
     if (!family || !user || !inviteEmail.trim()) return;
+
+    // プラン制限チェック
+    if (!canInviteMore()) {
+      setError(`${currentPlan}プランでは最大${currentLimits.maxMembers}人まで招待できます。プランをアップグレードしてください。`);
+      return;
+    }
 
     try {
       setIsLoading(true);
@@ -436,11 +564,23 @@ const SettingsPage: React.FC = () => {
                 {/* 家族招待ボタン */}
                 {canManageFamily && (
                   <div className="mt-4 pt-4 border-t border-gray-200">
+                    <div className="flex justify-between items-center mb-2">
+                      <div className="text-sm text-gray-600">
+                        メンバー: {getCurrentMemberCount()}/{currentLimits.maxMembers}人
+                      </div>
+                    </div>
                     <div className="flex gap-3 relative">
                       <Button 
                         variant="secondary" 
                         size="sm"
-                        onClick={() => setShowInviteOptions(!showInviteOptions)}
+                        onClick={() => {
+                          if (!canInviteMore()) {
+                            setError(`${currentPlan}プランでは最大${currentLimits.maxMembers}人まで招待できます。プランをアップグレードしてください。`);
+                            return;
+                          }
+                          setShowInviteOptions(!showInviteOptions);
+                        }}
+                        disabled={!canInviteMore()}
                       >
                         <ShareIcon className="w-4 h-4 mr-2" />
                         家族を招待
@@ -491,28 +631,106 @@ const SettingsPage: React.FC = () => {
                   <div className="space-y-3 mb-4">
                     {Object.entries(family.children || {}).map(([childId, child]) => {
                       const typedChild = child as FamilyChild;
+                      const isEditing = editingChildId === childId;
+                      
                       return (
-                        <div key={childId} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                          <div>
-                            <p className="font-medium text-gray-800">{typedChild.name}</p>
-                            <div className="text-sm text-gray-500">
-                              {typedChild.grade && <span>{typedChild.grade}</span>}
-                              {typedChild.school && <span className="ml-2">{typedChild.school}</span>}
-                              <span className="ml-2">
-                                {typedChild.isRegistered ? '✓登録済み' : '⚬未登録'}
-                              </span>
+                        <div key={childId} className="p-3 bg-gray-50 rounded-lg">
+                          {isEditing ? (
+                            // 編集モード
+                            <div className="space-y-3">
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                <input
+                                  type="text"
+                                  value={editChildName}
+                                  onChange={e => setEditChildName(e.target.value)}
+                                  placeholder="子どもの名前"
+                                  className="border border-gray-300 rounded px-3 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                                />
+                                <input
+                                  type="text"
+                                  value={editChildGrade}
+                                  onChange={e => setEditChildGrade(e.target.value)}
+                                  placeholder="学年（例：小学3年）"
+                                  className="border border-gray-300 rounded px-3 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                                />
+                                <input
+                                  type="text"
+                                  value={editChildSchool}
+                                  onChange={e => setEditChildSchool(e.target.value)}
+                                  placeholder="学校名"
+                                  className="border border-gray-300 rounded px-3 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                                />
+                              </div>
+                              <div className="flex gap-2 justify-end">
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm" 
+                                  onClick={handleCancelChildEdit}
+                                  disabled={isLoading}
+                                >
+                                  キャンセル
+                                </Button>
+                                <Button 
+                                  variant="primary" 
+                                  size="sm" 
+                                  onClick={handleSaveChildEdit}
+                                  disabled={isLoading || !editChildName.trim()}
+                                >
+                                  {isLoading ? '保存中...' : '保存'}
+                                </Button>
+                              </div>
                             </div>
-                          </div>
-                          <div className="flex gap-2">
-                            {!typedChild.isRegistered && (
-                              <Button variant="outline" size="sm">
-                                招待
-                              </Button>
-                            )}
-                            <Button variant="ghost" size="sm">
-                              <PencilIcon className="w-4 h-4" />
-                            </Button>
-                          </div>
+                          ) : (
+                            // 表示モード
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p className="font-medium text-gray-800">{typedChild.name}</p>
+                                <div className="text-sm text-gray-500">
+                                  {typedChild.grade && <span>{typedChild.grade}</span>}
+                                  {typedChild.school && <span className="ml-2">{typedChild.school}</span>}
+                                  <span className="ml-2">
+                                    {typedChild.isRegistered ? '✓登録済み' : '⚬未登録'}
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="flex gap-2">
+                                {!typedChild.isRegistered && canManageFamily && (
+                                  <Button 
+                                    variant="outline" 
+                                    size="sm"
+                                    onClick={() => handleInviteChild(childId)}
+                                    disabled={isLoading}
+                                    title="子ども用の招待リンクを作成"
+                                  >
+                                    招待
+                                  </Button>
+                                )}
+                                {canManageFamily && (
+                                  <Button 
+                                    variant="ghost" 
+                                    size="sm"
+                                    onClick={() => handleEditChild(childId, typedChild)}
+                                    disabled={isLoading}
+                                    title="子どもの情報を編集"
+                                  >
+                                    <PencilIcon className="w-4 h-4" />
+                                  </Button>
+                                )}
+                                {canManageFamily && (
+                                  <Button 
+                                    variant="ghost" 
+                                    size="sm"
+                                    onClick={() => handleDeleteChild(childId, typedChild.name)}
+                                    disabled={isLoading}
+                                    title="子どもを削除"
+                                    className="text-red-600 hover:text-red-800"
+                                  >
+                                    <TrashIcon className="w-4 h-4" />
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       );
                     })}
@@ -586,10 +804,20 @@ const SettingsPage: React.FC = () => {
                   </div>
                 ) : (
                   canManageFamily && (
-                    <div className="flex gap-3">
+                    <div className="space-y-3">
+                      <div className="text-sm text-gray-600">
+                        子ども: {getCurrentChildrenCount()}/{currentLimits.maxChildren}人
+                      </div>
                       <Button 
                         variant="secondary" 
-                        onClick={() => setShowAddChild(true)}
+                        onClick={() => {
+                          if (!canAddMoreChildren()) {
+                            setError(`${currentPlan}プランでは最大${currentLimits.maxChildren}人まで登録できます。プランをアップグレードしてください。`);
+                            return;
+                          }
+                          setShowAddChild(true);
+                        }}
+                        disabled={!canAddMoreChildren()}
                       >
                         子どもを追加
                       </Button>

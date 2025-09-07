@@ -372,4 +372,118 @@ export class FamilyService {
       throw error;
     }
   }
+
+  /**
+   * 子どもの情報を更新
+   */
+  static async updateChild(
+    familyId: string, 
+    childId: string, 
+    updates: Partial<FamilyChild>
+  ): Promise<void> {
+    try {
+      const familyRef = doc(db, this.FAMILIES_COLLECTION, familyId);
+      const familyDoc = await getDoc(familyRef);
+      
+      if (!familyDoc.exists()) {
+        throw new Error('家族が見つかりません');
+      }
+
+      const familyData = familyDoc.data() as Family;
+      const updatedChildren = {
+        ...familyData.children,
+        [childId]: {
+          ...familyData.children[childId],
+          ...updates,
+          updatedAt: new Date().toISOString()
+        }
+      };
+
+      await updateDoc(familyRef, {
+        children: updatedChildren,
+        updatedAt: serverTimestamp()
+      });
+
+    } catch (error) {
+      console.error('Error updating child:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 子どもを削除
+   */
+  static async removeChild(familyId: string, childId: string): Promise<void> {
+    try {
+      const familyRef = doc(db, this.FAMILIES_COLLECTION, familyId);
+      const familyDoc = await getDoc(familyRef);
+      
+      if (!familyDoc.exists()) {
+        throw new Error('家族が見つかりません');
+      }
+
+      const familyData = familyDoc.data() as Family;
+      const updatedChildren = { ...familyData.children };
+      delete updatedChildren[childId];
+
+      await updateDoc(familyRef, {
+        children: updatedChildren,
+        updatedAt: serverTimestamp()
+      });
+
+    } catch (error) {
+      console.error('Error removing child:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 子ども用の招待コードを作成
+   */
+  static async createChildInvite(
+    familyId: string, 
+    childId: string, 
+    invitedBy: string
+  ): Promise<string> {
+    try {
+      const inviteCode = Math.random().toString(36).substring(2, 15) + 
+                        Math.random().toString(36).substring(2, 15);
+
+      const inviteData: FamilyInvite = {
+        type: 'child',
+        targetChildId: childId,
+        invitedBy,
+        email: null,
+        code: inviteCode,
+        method: 'qr',
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // 7日後
+        createdAt: new Date().toISOString(),
+        used: false
+      };
+
+      const familyRef = doc(db, this.FAMILIES_COLLECTION, familyId);
+      const familyDoc = await getDoc(familyRef);
+      
+      if (!familyDoc.exists()) {
+        throw new Error('家族が見つかりません');
+      }
+
+      const familyData = familyDoc.data() as Family;
+      const updatedInvites = {
+        ...familyData.invites,
+        [inviteCode]: inviteData
+      };
+
+      await updateDoc(familyRef, {
+        invites: updatedInvites,
+        updatedAt: serverTimestamp()
+      });
+
+      return inviteCode;
+
+    } catch (error) {
+      console.error('Error creating child invite:', error);
+      throw error;
+    }
+  }
 }
