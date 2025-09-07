@@ -1129,10 +1129,9 @@ const SettingsPage: React.FC = () => {
               </div>
               <div className="text-right">
                 <div className="text-2xl font-bold text-orange-600">
-                  {userProfile?.planType === 'free' ? '¥0' : 
-                   userProfile?.planType === 'standard' ? '¥100' : '¥500'}
+                  {userProfile?.planType === 'free' ? '¥0/月' : 
+                   userProfile?.planType === 'standard' ? '¥100/月' : '¥500/月'}
                 </div>
-                <div className="text-sm text-gray-600">/月</div>
               </div>
             </div>
             
