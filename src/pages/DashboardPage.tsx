@@ -176,11 +176,32 @@ const DashboardPage: React.FC = () => {
   // TODO完了の切り替え
   const handleToggleTodo = async (todoId: string) => {
     try {
-      await AnalysisService.toggleTodoCompletion(todoId);
-      // ローカル状態を更新
-      setTodos(prev => prev.filter(todo => todo.id !== todoId));
+      // まずローカル状態で完了状態を切り替え（楽観的更新）
+      const currentTodo = todos.find(t => t.id === todoId);
+      if (!currentTodo) return;
+
+      const newCompletedState = !currentTodo.completed;
+      
+      setTodos(prev => prev.map(todo => 
+        todo.id === todoId 
+          ? { ...todo, completed: newCompletedState, updatedAt: new Date() }
+          : todo
+      ));
+
+      // サーバーに完了状態を更新
+      await AnalysisService.updateTodo(todoId, { 
+        completed: newCompletedState,
+        updatedAt: new Date()
+      });
     } catch (error) {
       console.error('Failed to toggle todo:', error);
+      // エラーが発生した場合、状態を元に戻す
+      setTodos(prev => prev.map(todo => 
+        todo.id === todoId 
+          ? { ...todo, completed: !todo.completed }
+          : todo
+      ));
+      alert('タスクの状態変更に失敗しました。');
     }
   };
 
@@ -385,7 +406,16 @@ const DashboardPage: React.FC = () => {
                 </div>
               ) : todos.length > 0 ? (
                 <div className="space-y-3 max-h-96 overflow-y-auto">
-                  {todos.map((todo) => (
+                  {todos
+                    .sort((a, b) => {
+                      // 未完了タスクを上に、完了済みタスクを下に
+                      if (a.completed !== b.completed) {
+                        return a.completed ? 1 : -1;
+                      }
+                      // 同じ完了状態の場合は、作成日時の降順（新しいものが上）
+                      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+                    })
+                    .map((todo) => (
                     <div 
                       key={todo.id} 
                       className={`border rounded-lg p-4 transition-all ${
