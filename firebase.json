@@ -28,4 +28,16 @@
     }
   ],
   "extensions": {}
+  ,
+  "emulators": {
+    "firestore": {
+      "port": 8082
+    },
+    "functions": {
+      "port": 5001
+    },
+    "mcp": {
+      "port": 8080
+    }
+  }
 }

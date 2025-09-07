@@ -1,0 +1,382 @@
+import { 
+  collection, 
+  addDoc, 
+  getDocs, 
+  query, 
+  where, 
+  orderBy, 
+  limit, 
+  doc, 
+  updateDoc,
+  deleteDoc,
+  serverTimestamp,
+  Timestamp 
+} from 'firebase/firestore';
+import { db } from './firebase';
+import { ClassNewsletterSchema } from '../types';
+
+export interface AnalysisRecord {
+  id?: string;
+  userId: string;
+  originalText: string;
+  extractedData: ClassNewsletterSchema;
+  imageDataUrl?: string;
+  selectedChildIds: string[];
+  createdAt: Date;
+  updatedAt: Date;
+  isPinned?: boolean;
+  tags?: string[];
+}
+
+export interface TodoItem {
+  id?: string;
+  userId: string;
+  analysisId: string;
+  title: string;
+  description?: string;
+  dueDate?: Date;
+  priority: 'high' | 'medium' | 'low';
+  completed: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface NotificationItem {
+  id?: string;
+  userId: string;
+  analysisId: string;
+  title: string;
+  message: string;
+  type: 'deadline' | 'event' | 'reminder' | 'info';
+  isRead: boolean;
+  scheduledFor?: Date;
+  createdAt: Date;
+}
+
+export class AnalysisService {
+
+  /**
+   * ユーザーのTODOを追加
+   */
+  static async addUserTodo(userId: string, todo: Omit<TodoItem, 'id'>): Promise<string> {
+    try {
+      const docRef = await addDoc(collection(db, 'todos'), {
+        ...todo,
+        userId,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      return docRef.id;
+    } catch (error) {
+      console.error('Error adding todo:', error);
+      throw new Error('タスクの追加に失敗しました');
+    }
+  }
+
+  /**
+   * ユーザーのTODOを削除
+   */
+  static async deleteTodo(todoId: string): Promise<void> {
+    try {
+      const todoDoc = doc(db, 'todos', todoId);
+      await deleteDoc(todoDoc);
+    } catch (error) {
+      console.error('Error deleting todo:', error);
+      throw new Error('タスクの削除に失敗しました');
+    }
+  }
+  /**
+   * 解析結果を保存
+   */
+  static async saveAnalysis(
+    userId: string,
+    originalText: string,
+    extractedData: ClassNewsletterSchema,
+    selectedChildIds: string[] = [],
+    imageDataUrl?: string
+  ): Promise<string> {
+    try {
+      const analysisRecord: Omit<AnalysisRecord, 'id'> = {
+        userId,
+        originalText,
+        extractedData,
+        selectedChildIds,
+        imageDataUrl,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        isPinned: false,
+        tags: []
+      };
+
+      const docRef = await addDoc(collection(db, 'analyses'), {
+        ...analysisRecord,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+
+      // TODOアイテムとして保存
+      await this.extractAndSaveTodos(userId, docRef.id, extractedData);
+
+      // 通知を生成
+      await this.generateNotifications(userId, docRef.id, extractedData);
+
+      return docRef.id;
+    } catch (error) {
+      console.error('Error saving analysis:', error);
+      throw new Error('解析結果の保存に失敗しました');
+    }
+  }
+
+  /**
+   * ユーザーの解析結果一覧を取得
+   */
+  static async getUserAnalyses(userId: string, limitCount: number = 20): Promise<AnalysisRecord[]> {
+    try {
+      const q = query(
+        collection(db, 'analyses'),
+        where('userId', '==', userId),
+        orderBy('createdAt', 'desc'),
+        limit(limitCount)
+      );
+
+      const querySnapshot = await getDocs(q);
+      
+      return querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        createdAt: doc.data().createdAt?.toDate() || new Date(),
+        updatedAt: doc.data().updatedAt?.toDate() || new Date(),
+      })) as AnalysisRecord[];
+    } catch (error) {
+      console.error('Error fetching user analyses:', error);
+      throw new Error('解析結果の取得に失敗しました');
+    }
+  }
+
+  /**
+   * 抽出データからTODOアイテムを作成
+   */
+  static async extractAndSaveTodos(
+    userId: string, 
+    analysisId: string, 
+    extractedData: ClassNewsletterSchema
+  ): Promise<void> {
+    try {
+      const todos: Omit<TodoItem, 'id'>[] = [];
+
+      // actionsからTODOを抽出
+      extractedData.actions?.forEach(action => {
+        if (action.type === 'todo' || action.due_date) {
+          todos.push({
+            userId,
+            analysisId,
+            title: action.event_name || '未定のタスク',
+            description: action.notes || undefined,
+            dueDate: action.due_date ? new Date(action.due_date) : undefined,
+            priority: action.importance === 'high' ? 'high' : 
+                     action.importance === 'low' ? 'low' : 'medium',
+            completed: false,
+            createdAt: new Date(),
+            updatedAt: new Date()
+          });
+        }
+      });
+
+      // TODOsを個別に保存
+      for (const todo of todos) {
+        await addDoc(collection(db, 'todos'), {
+          ...todo,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        });
+      }
+    } catch (error) {
+      console.error('Error saving todos:', error);
+    }
+  }
+
+  /**
+   * 通知を生成
+   */
+  static async generateNotifications(
+    userId: string, 
+    analysisId: string, 
+    extractedData: ClassNewsletterSchema
+  ): Promise<void> {
+    try {
+      const notifications: Omit<NotificationItem, 'id'>[] = [];
+
+      // アクションから期限付きの通知を生成
+      extractedData.actions?.forEach(action => {
+        if (action.due_date) {
+          const dueDate = new Date(action.due_date);
+          const now = new Date();
+          
+          // 期限の3日前に通知
+          const reminderDate = new Date(dueDate);
+          reminderDate.setDate(reminderDate.getDate() - 3);
+          
+          if (reminderDate > now) {
+            notifications.push({
+              userId,
+              analysisId,
+              title: '期限のリマインダー',
+              message: `${action.event_name}の期限が近づいています（期限: ${action.due_date}）`,
+              type: 'deadline',
+              isRead: false,
+              scheduledFor: reminderDate,
+              createdAt: new Date()
+            });
+          }
+
+          // 期限当日の通知
+          if (dueDate > now) {
+            notifications.push({
+              userId,
+              analysisId,
+              title: '期限です！',
+              message: `${action.event_name}の期限日です`,
+              type: 'deadline',
+              isRead: false,
+              scheduledFor: dueDate,
+              createdAt: new Date()
+            });
+          }
+        }
+
+        // イベントの前日通知
+        if (action.type === 'event' && action.event_date) {
+          const eventDate = new Date(action.event_date);
+          const reminderDate = new Date(eventDate);
+          reminderDate.setDate(reminderDate.getDate() - 1);
+          const now = new Date();
+
+          if (reminderDate > now) {
+            notifications.push({
+              userId,
+              analysisId,
+              title: 'イベントのお知らせ',
+              message: `明日は${action.event_name}です`,
+              type: 'event',
+              isRead: false,
+              scheduledFor: reminderDate,
+              createdAt: new Date()
+            });
+          }
+        }
+      });
+
+      // 通知を個別に保存
+      for (const notification of notifications) {
+        await addDoc(collection(db, 'notifications'), {
+          ...notification,
+          createdAt: serverTimestamp()
+        });
+      }
+    } catch (error) {
+      console.error('Error generating notifications:', error);
+    }
+  }
+
+  /**
+   * ユーザーのTODOリストを取得
+   */
+  static async getUserTodos(userId: string, includeCompleted: boolean = false): Promise<TodoItem[]> {
+    try {
+      let q = query(
+        collection(db, 'todos'),
+        where('userId', '==', userId),
+        orderBy('dueDate', 'asc')
+      );
+
+      if (!includeCompleted) {
+        q = query(
+          collection(db, 'todos'),
+          where('userId', '==', userId),
+          where('completed', '==', false),
+          orderBy('dueDate', 'asc')
+        );
+      }
+
+      const querySnapshot = await getDocs(q);
+      
+      return querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        dueDate: doc.data().dueDate?.toDate() || undefined,
+        createdAt: doc.data().createdAt?.toDate() || new Date(),
+        updatedAt: doc.data().updatedAt?.toDate() || new Date(),
+      })) as TodoItem[];
+    } catch (error) {
+      console.error('Error fetching todos:', error);
+      throw new Error('TODOリストの取得に失敗しました');
+    }
+  }
+
+  /**
+   * TODOの完了状態を切り替え
+   */
+  static async toggleTodoCompletion(todoId: string): Promise<void> {
+    try {
+      const todoDoc = doc(db, 'todos', todoId);
+      await updateDoc(todoDoc, {
+        completed: true,
+        updatedAt: serverTimestamp()
+      });
+    } catch (error) {
+      console.error('Error updating todo:', error);
+      throw new Error('TODOの更新に失敗しました');
+    }
+  }
+
+  /**
+   * ユーザーの通知を取得
+   */
+  static async getUserNotifications(userId: string, unreadOnly: boolean = false): Promise<NotificationItem[]> {
+    try {
+      let q = query(
+        collection(db, 'notifications'),
+        where('userId', '==', userId),
+        orderBy('createdAt', 'desc'),
+        limit(50)
+      );
+
+      if (unreadOnly) {
+        q = query(
+          collection(db, 'notifications'),
+          where('userId', '==', userId),
+          where('isRead', '==', false),
+          orderBy('createdAt', 'desc'),
+          limit(50)
+        );
+      }
+
+      const querySnapshot = await getDocs(q);
+      
+      return querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        scheduledFor: doc.data().scheduledFor?.toDate() || undefined,
+        createdAt: doc.data().createdAt?.toDate() || new Date(),
+      })) as NotificationItem[];
+    } catch (error) {
+      console.error('Error fetching notifications:', error);
+      throw new Error('通知の取得に失敗しました');
+    }
+  }
+
+  /**
+   * 通知を既読にする
+   */
+  static async markNotificationAsRead(notificationId: string): Promise<void> {
+    try {
+      const notificationDoc = doc(db, 'notifications', notificationId);
+      await updateDoc(notificationDoc, {
+        isRead: true
+      });
+    } catch (error) {
+      console.error('Error marking notification as read:', error);
+      throw new Error('通知の既読処理に失敗しました');
+    }
+  }
+}

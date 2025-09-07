@@ -66,5 +66,17 @@ service cloud.firestore {
         && request.auth.uid in get(/databases/$(database)/documents/families/$(resource.data.familyId)).data.members;
       allow create: if request.auth != null;
     }
+
+    // 解析結果管理
+    match /analyses/{analysisId} {
+      allow read, write: if request.auth != null && request.auth.uid == resource.data.userId;
+      allow create: if request.auth != null;
+    }
+
+    // TODOリスト管理
+    match /todos/{todoId} {
+      allow read, write: if request.auth != null && request.auth.uid == resource.data.userId;
+      allow create: if request.auth != null;
+    }
   }
 }

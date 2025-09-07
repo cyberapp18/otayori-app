@@ -9,6 +9,8 @@ import Button from '../components/Button';
 import { performOCR } from '../services/ocrService';
 import { extractClassNewsletterData } from '../services/geminiService';
 import { sanitize } from '../services/sanitization';
+import { UserService } from '../services/userService';
+import { AnalysisService } from '../services/analysisService';
 import { ClassNewsletterSchema } from '../types';
 
 enum UploadStep {
@@ -40,11 +42,21 @@ const UploadPage: React.FC = () => {
   const [startTime, setStartTime] = useState<number | null>(null);
   const [imageDataUrl, setImageDataUrl] = useState<string | null>(null);
   const [selectedChildIds, setSelectedChildIds] = useState<string[]>([]);
+  const [usageInfo, setUsageInfo] = useState<any>(null);
 
-  const { isAuthenticated, user } = useAppContext();
+  const { isAuthenticated, user, usageInfo: contextUsageInfo } = useAppContext();
   const navigate = useNavigate();
 
-  useEffect(() => { setStartTime(Date.now()); }, []);
+  useEffect(() => { 
+    setStartTime(Date.now()); 
+    // usageInfoを取得
+    if (contextUsageInfo) {
+      setUsageInfo(contextUsageInfo);
+    } else if (user && isAuthenticated) {
+      // フォールバックとして直接取得
+      UserService.checkUsageLimit(user.uid).then(setUsageInfo);
+    }
+  }, [user, isAuthenticated, contextUsageInfo]);
 
   const handleChildSelect = (childId: string) => {
     setSelectedChildIds(prev => prev.includes(childId)
@@ -54,6 +66,18 @@ const UploadPage: React.FC = () => {
   };
 
   const handleFileSelect = async (file: File, dataUrl: string) => {
+    // プラン制限チェック
+    if (isAuthenticated && user) {
+      const currentUsage = await UserService.checkUsageLimit(user.uid);
+      setUsageInfo(currentUsage);
+      
+      if (!currentUsage.canUse) {
+        setError(`今月の利用制限に達しました。残り${currentUsage.remaining}回です。プランをアップグレードするか、来月まで待ってください。`);
+        setStep(UploadStep.Error);
+        return;
+      }
+    }
+
     console.log('handleFileSelect called with:', file.name);
     try {
       setImageDataUrl(dataUrl);
@@ -164,6 +188,22 @@ const UploadPage: React.FC = () => {
         return;
       }
 
+      // 使用量をインクリメント（認証済みユーザーのみ）
+      if (user) {
+        await UserService.incrementUsage(user.uid);
+        console.log('Usage incremented for user:', user.uid);
+        
+        // 解析結果を保存
+        const analysisId = await AnalysisService.saveAnalysis(
+          user.uid,
+          rawText,
+          extractedData,
+          selectedChildIds,
+          imageDataUrl || undefined
+        );
+        console.log('Analysis saved with ID:', analysisId);
+      }
+
       // TODO: 実際のデータ保存機能はここで実装
       console.log("保存機能は後で実装します", { extractedData, rawText, selectedChildIds });
       
@@ -191,7 +231,45 @@ const UploadPage: React.FC = () => {
     console.log('renderContent called, current step:', step);
     switch (step) {
       case UploadStep.SelectFile:
-        return <Uploader onFileSelect={handleFileSelect} />;
+        return (
+          <div className="space-y-6">
+            {/* 使用状況表示 */}
+            {isAuthenticated && usageInfo && (
+              <div className="bg-white rounded-lg shadow-md p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">利用状況</h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="text-center">
+                    <p className="text-sm text-gray-600">プラン</p>
+                    <p className="text-lg font-bold text-blue-600">
+                      {usageInfo.planType === 'free' ? '無料プラン' : 
+                       usageInfo.planType === 'standard' ? 'スタンダード' : 'プロプラン'}
+                    </p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-sm text-gray-600">残り回数</p>
+                    <p className={`text-lg font-bold ${usageInfo.canUse ? 'text-green-600' : 'text-red-600'}`}>
+                      {usageInfo.remaining}回
+                    </p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-sm text-gray-600">状態</p>
+                    <p className={`text-lg font-bold ${usageInfo.canUse ? 'text-green-600' : 'text-red-600'}`}>
+                      {usageInfo.canUse ? '利用可能' : '制限中'}
+                    </p>
+                  </div>
+                </div>
+                {usageInfo.needsUpgrade && (
+                  <div className="mt-4 p-3 bg-orange-50 rounded-lg">
+                    <p className="text-orange-800 text-sm">
+                      今月の利用制限に達しました。プランをアップグレードしてより多くご利用ください。
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+            <Uploader onFileSelect={handleFileSelect} />
+          </div>
+        );
 
       case UploadStep.ProcessingOCR:
         return <Spinner text="画像を解析しています..." />;

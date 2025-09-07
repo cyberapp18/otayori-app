@@ -1,3 +1,19 @@
+import { sendPasswordResetEmail as firebaseSendPasswordResetEmail } from 'firebase/auth';
+
+// パスワードリセットメール送信
+export const sendPasswordResetEmail = async (email: string): Promise<void> => {
+  try {
+    const auth = getAuth(getApp());
+    await firebaseSendPasswordResetEmail(auth, email);
+    console.log('Password reset email sent:', email);
+  } catch (error: any) {
+    console.error('Error sending password reset email:', error);
+    if (error.code === 'auth/user-not-found') {
+      throw new Error('このメールアドレスは登録されていません。');
+    }
+    throw new Error('パスワードリセットメールの送信に失敗しました。');
+  }
+};
 import { User } from '../types';
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, updateProfile, User as FirebaseAuthUser } from 'firebase/auth';
 import { getFirestore, doc, setDoc } from 'firebase/firestore';
