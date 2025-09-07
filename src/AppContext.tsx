@@ -124,7 +124,15 @@ export const EnhancedAppContextProvider: React.FC<{ children: React.ReactNode }>
     }
 
     try {
-      const profile = await UserService.getUserProfile(user.uid);
+      let profile = await UserService.getUserProfile(user.uid);
+      
+      // プロフィールが存在しない場合、UserServiceで自動作成されるまで待つ
+      if (!profile) {
+        console.log('プロフィールが取得できませんでした。ユーザープロフィールを作成します。');
+        await UserService.createUserProfile(user);
+        profile = await UserService.getUserProfile(user.uid);
+      }
+      
       setUserProfile(profile);
     } catch (error) {
       console.error('Failed to refresh profile:', error);
@@ -179,25 +187,35 @@ export const EnhancedAppContextProvider: React.FC<{ children: React.ReactNode }>
           // ユーザープロフィールの作成・更新
           await UserService.createUserProfile(user);
           
-          // プロフィール情報取得
-          const profile = await UserService.getUserProfile(user.uid);
+          // プロフィール情報取得（リトライロジック付き）
+          let profile = await UserService.getUserProfile(user.uid);
+          
+          // プロフィールがまだ取得できない場合、少し待ってリトライ
+          if (!profile) {
+            console.log('プロフィール取得をリトライします...');
+            await new Promise(resolve => setTimeout(resolve, 1000)); // 1秒待機
+            profile = await UserService.getUserProfile(user.uid);
+          }
+          
           setUserProfile(profile);
           
-          // 使用量情報取得
-          const usage = await UserService.checkUsageLimit(user.uid);
-          setUsageInfo(usage);
-          
-          // 家族情報取得（familyIdがある場合）
-          if (profile?.familyId) {
-            try {
-              setFamilyLoading(true);
-              const familyData = await FamilyService.getFamily(profile.familyId);
-              setFamily(familyData);
-            } catch (error) {
-              console.error('Failed to load family data:', error);
-              setFamily(null);
-            } finally {
-              setFamilyLoading(false);
+          // プロフィールがある場合のみ使用量情報取得
+          if (profile) {
+            const usage = await UserService.checkUsageLimit(user.uid);
+            setUsageInfo(usage);
+            
+            // 家族情報取得（familyIdがある場合）
+            if (profile.familyId) {
+              try {
+                setFamilyLoading(true);
+                const familyData = await FamilyService.getFamily(profile.familyId);
+                setFamily(familyData);
+              } catch (error) {
+                console.error('Failed to load family data:', error);
+                setFamily(null);
+              } finally {
+                setFamilyLoading(false);
+              }
             }
           }
         } catch (error) {

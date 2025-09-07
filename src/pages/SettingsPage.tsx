@@ -1760,6 +1760,22 @@ const SettingsPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* デバッグ情報（開発用） */}
+      <div className="mt-8 bg-gray-100 rounded-lg p-4">
+        <h3 className="font-medium text-gray-700 mb-2">デバッグ情報（開発用）:</h3>
+        <div className="text-sm text-gray-600 space-y-2">
+          <div><strong>ユーザーID:</strong> {user?.uid}</div>
+          <div><strong>メール:</strong> {user?.email}</div>
+          <div><strong>表示名:</strong> {user?.displayName}</div>
+          <div><strong>プランタイプ:</strong> {userProfile?.planType || 'unknown'}</div>
+          <div><strong>月間制限:</strong> {userProfile?.monthlyLimit || 'unknown'}</div>
+          <div><strong>今月の使用量:</strong> {userProfile?.currentMonthUsage || 0}</div>
+          <div><strong>家族ID:</strong> {userProfile?.familyId || 'なし'}</div>
+          <div><strong>家族での役割:</strong> {userProfile?.familyRole || 'なし'}</div>
+          <div><strong>テストパパか？:</strong> {user?.displayName === 'テストパパ' ? '✅ Yes' : '❌ No'}</div>
+        </div>
+      </div>
     </div>
   );
 };

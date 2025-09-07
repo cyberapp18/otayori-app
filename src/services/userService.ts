@@ -78,8 +78,34 @@ export class UserService {
       const userSnap = await getDoc(userRef);
       
       if (!userSnap.exists()) {
-        console.log('ユーザープロフィールが存在しません');
-        return null;
+        console.log('ユーザープロフィールが存在しません。デフォルトプロフィールを作成します。');
+        
+        // Firebase Authからユーザー情報を取得して、デフォルトプロフィールを作成
+        const defaultProfile: UserProfile = {
+          uid: userId,
+          email: '',
+          displayName: 'ユーザー',
+          emailVerified: false,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          isActive: true,
+          planType: 'free',
+          monthlyLimit: 4,
+          currentMonthUsage: 0,
+          lastResetDate: new Date(),
+          familyRole: 'owner'
+        };
+        
+        // Firestoreに保存
+        await setDoc(userRef, {
+          ...defaultProfile,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+          lastResetDate: serverTimestamp()
+        });
+        
+        console.log('デフォルトプロフィールを作成しました:', defaultProfile);
+        return defaultProfile;
       }
       
       const data = userSnap.data();
@@ -94,7 +120,7 @@ export class UserService {
         updatedAt: data.updatedAt?.toDate(),
         isActive: data.isActive,
         planType: data.planType || 'free',
-        monthlyLimit: data.monthlyLimit || 5,
+        monthlyLimit: data.monthlyLimit || (data.planType === 'standard' ? 30 : data.planType === 'pro' ? 200 : 4),
         currentMonthUsage: data.currentMonthUsage || 0,
         lastResetDate: data.lastResetDate?.toDate() || new Date(),
         
