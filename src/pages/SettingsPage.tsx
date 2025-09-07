@@ -1122,22 +1122,17 @@ const SettingsPage: React.FC = () => {
           <div className="border rounded-lg p-4 mb-6 bg-orange-50 border-orange-200">
             <div className="flex justify-between items-start mb-4">
               <div>
+                <p className="text-sm text-gray-600 mb-1">現在のご利用プラン</p>
                 <h3 className="text-lg font-semibold text-gray-800">
                   {getPlanName(userProfile?.planType || 'free')}
                 </h3>
-                <p className="text-sm text-gray-600">現在のご利用プラン</p>
               </div>
               <div className="text-right">
-                {userProfile?.planType === 'free' ? (
-                  <div className="text-2xl font-bold text-green-600">無料</div>
-                ) : (
-                  <>
-                    <div className="text-2xl font-bold text-orange-600">
-                      {userProfile?.planType === 'standard' ? '¥100' : '¥500'}
-                    </div>
-                    <div className="text-sm text-gray-600">/月</div>
-                  </>
-                )}
+                <div className="text-2xl font-bold text-orange-600">
+                  {userProfile?.planType === 'free' ? '¥0' : 
+                   userProfile?.planType === 'standard' ? '¥100' : '¥500'}
+                </div>
+                <div className="text-sm text-gray-600">/月</div>
               </div>
             </div>
             
