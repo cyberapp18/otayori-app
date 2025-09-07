@@ -28,6 +28,9 @@ const DashboardPage: React.FC = () => {
   const [editAssignedTo, setEditAssignedTo] = useState('');
   const [editPriority, setEditPriority] = useState<'high' | 'medium' | 'low'>('medium');
 
+  // TODOフォーム表示制御
+  const [showAddForm, setShowAddForm] = useState(false);
+
   // 家族メンバー一覧（実際には家族サービスから取得）
   const [familyMembers] = useState([
     { id: user?.uid || '', name: user?.displayName || 'あなた' },
@@ -89,6 +92,7 @@ const DashboardPage: React.FC = () => {
       setNewTodoDueDate('');
       setNewTodoAssignedTo('');
       setNewTodoPriority('low');
+      setShowAddForm(false); // フォームを閉じる
     } catch (error) {
       console.error('Failed to add todo:', error);
       alert('タスクの追加に失敗しました。');
@@ -345,60 +349,83 @@ const DashboardPage: React.FC = () => {
           {/* TODOリスト */}
           <div className="lg:col-span-2">
             <div className="bg-white rounded-lg shadow-md p-6">
-              {/* 新規TODO追加フォーム */}
-              <form onSubmit={handleAddTodo} className="mb-6 space-y-3 border-b pb-4">
-                <h4 className="font-semibold text-gray-800">新しいタスクを追加</h4>
-                <input
-                  type="text"
-                  className="border border-gray-300 rounded px-3 py-2 w-full focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                  placeholder="タスク名"
-                  value={newTodoTitle}
-                  onChange={e => setNewTodoTitle(e.target.value)}
-                  maxLength={50}
-                  required
-                />
-                <textarea
-                  className="border border-gray-300 rounded px-3 py-2 w-full h-20 resize-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                  placeholder="詳細 (任意)"
-                  value={newTodoDescription}
-                  onChange={e => setNewTodoDescription(e.target.value)}
-                  maxLength={200}
-                />
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2">
+              {/* 新規TODO追加ボタン */}
+              <div className="mb-4">
+                <button
+                  type="button"
+                  onClick={() => setShowAddForm(!showAddForm)}
+                  className="flex items-center gap-2 px-4 py-2 text-orange-600 border border-orange-200 rounded-lg hover:bg-orange-50 transition-colors duration-200"
+                >
+                  {showAddForm ? (
+                    <>
+                      <span className="text-lg">✕</span>
+                      <span>閉じる</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-lg">＋</span>
+                      <span>新しいタスクを追加</span>
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {/* 新規TODO追加フォーム（折りたたみ式） */}
+              {showAddForm && (
+                <form onSubmit={handleAddTodo} className="mb-6 space-y-3 border-b pb-4">
+                  <h4 className="font-semibold text-gray-800">新しいタスクを追加</h4>
                   <input
-                    type="date"
-                    className="border border-gray-300 rounded px-3 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                    value={newTodoDueDate}
-                    onChange={e => setNewTodoDueDate(e.target.value)}
+                    type="text"
+                    className="border border-gray-300 rounded px-3 py-2 w-full focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                    placeholder="タスク名"
+                    value={newTodoTitle}
+                    onChange={e => setNewTodoTitle(e.target.value)}
+                    maxLength={50}
+                    required
                   />
-                  <select
-                    className="border border-gray-300 rounded px-3 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                    value={newTodoAssignedTo}
-                    onChange={e => setNewTodoAssignedTo(e.target.value)}
-                  >
-                    <option value="">担当者を選択</option>
-                    {familyMembers.map(member => (
-                      <option key={member.id} value={member.id}>{member.name}</option>
-                    ))}
-                  </select>
-                  <select
-                    className="border border-gray-300 rounded px-3 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                    value={newTodoPriority}
-                    onChange={e => setNewTodoPriority(e.target.value as 'low' | 'medium' | 'high')}
-                  >
-                    <option value="low">優先度: 低</option>
-                    <option value="medium">優先度: 中</option>
-                    <option value="high">優先度: 高</option>
-                  </select>
-                  <button
-                    type="submit"
-                    className="bg-orange-500 text-white rounded px-4 py-2 hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed"
-                    disabled={addingTodo || !newTodoTitle.trim()}
-                  >
-                    {addingTodo ? '追加中...' : 'タスク追加'}
-                  </button>
-                </div>
-              </form>
+                  <textarea
+                    className="border border-gray-300 rounded px-3 py-2 w-full h-20 resize-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                    placeholder="詳細 (任意)"
+                    value={newTodoDescription}
+                    onChange={e => setNewTodoDescription(e.target.value)}
+                    maxLength={200}
+                  />
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2">
+                    <input
+                      type="date"
+                      className="border border-gray-300 rounded px-3 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                      value={newTodoDueDate}
+                      onChange={e => setNewTodoDueDate(e.target.value)}
+                    />
+                    <select
+                      className="border border-gray-300 rounded px-3 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                      value={newTodoAssignedTo}
+                      onChange={e => setNewTodoAssignedTo(e.target.value)}
+                    >
+                      <option value="">担当者を選択</option>
+                      {familyMembers.map(member => (
+                        <option key={member.id} value={member.id}>{member.name}</option>
+                      ))}
+                    </select>
+                    <select
+                      className="border border-gray-300 rounded px-3 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                      value={newTodoPriority}
+                      onChange={e => setNewTodoPriority(e.target.value as 'low' | 'medium' | 'high')}
+                    >
+                      <option value="low">優先度: 低</option>
+                      <option value="medium">優先度: 中</option>
+                      <option value="high">優先度: 高</option>
+                    </select>
+                    <button
+                      type="submit"
+                      className="bg-orange-500 text-white rounded px-4 py-2 hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                      disabled={addingTodo || !newTodoTitle.trim()}
+                    >
+                      {addingTodo ? '追加中...' : 'タスク追加'}
+                    </button>
+                  </div>
+                </form>
+              )}
 
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center">
