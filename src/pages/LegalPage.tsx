@@ -19,7 +19,7 @@ const LegalPage: React.FC = () => {
               </h2>
               <p className="text-gray-700">
                 [事業者名を記載]<br />
-                代表者: [代表者名]
+                代表者: 大久保佑
               </p>
             </section>
 
@@ -28,8 +28,8 @@ const LegalPage: React.FC = () => {
                 所在地
               </h2>
               <p className="text-gray-700">
-                〒[郵便番号]<br />
-                [住所を記載]
+                東京都品川区<br />
+                所在地については、お問い合わせフォームよりご請求をいただければ、遅滞なく開示いたします。
               </p>
             </section>
 
@@ -38,8 +38,8 @@ const LegalPage: React.FC = () => {
                 連絡先
               </h2>
               <div className="text-gray-700 space-y-2">
-                <p><strong>電話番号:</strong> [電話番号]</p>
-                <p><strong>メールアドレス:</strong> [メールアドレス]</p>
+                <p><strong>電話番号:</strong> 電話番号については、お問い合わせフォームよりご請求をいただければ、遅滞なく開示いたします。</p>
+                <p><strong>メールアドレス:</strong> cyberapp18@gmail.com</p>
                 <p><strong>営業時間:</strong> 平日 9:00-18:00（土日祝日を除く）</p>
               </div>
             </section>
