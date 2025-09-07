@@ -17,6 +17,7 @@ const DashboardPage: React.FC = () => {
   const [newTodoDescription, setNewTodoDescription] = useState('');
   const [newTodoDueDate, setNewTodoDueDate] = useState('');
   const [newTodoAssignedTo, setNewTodoAssignedTo] = useState('');
+  const [newTodoPriority, setNewTodoPriority] = useState<'high' | 'medium' | 'low'>('low');
   const [addingTodo, setAddingTodo] = useState(false);
 
   // 編集用状態
@@ -59,7 +60,7 @@ const DashboardPage: React.FC = () => {
         dueDate: newTodoDueDate ? new Date(newTodoDueDate) : undefined,
         assignedTo: newTodoAssignedTo || user.uid,
         assignedToName: assignedMember?.name || 'あなた',
-        priority: 'medium',
+        priority: newTodoPriority,
         completed: false,
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -74,7 +75,7 @@ const DashboardPage: React.FC = () => {
           dueDate: newTodoDueDate ? new Date(newTodoDueDate) : undefined,
           assignedTo: newTodoAssignedTo || user.uid,
           assignedToName: assignedMember?.name || 'あなた',
-          priority: 'medium', 
+          priority: newTodoPriority, 
           completed: false, 
           createdAt: new Date(), 
           updatedAt: new Date(), 
@@ -87,6 +88,7 @@ const DashboardPage: React.FC = () => {
       setNewTodoDescription('');
       setNewTodoDueDate('');
       setNewTodoAssignedTo('');
+      setNewTodoPriority('low');
     } catch (error) {
       console.error('Failed to add todo:', error);
       alert('タスクの追加に失敗しました。');
