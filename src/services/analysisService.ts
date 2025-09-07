@@ -37,6 +37,8 @@ export interface TodoItem {
   dueDate?: Date;
   priority: 'high' | 'medium' | 'low';
   completed: boolean;
+  assignedTo?: string; // 実施担当者のユーザーID
+  assignedToName?: string; // 実施担当者の表示名
   createdAt: Date;
   updatedAt: Date;
 }
@@ -85,6 +87,22 @@ export class AnalysisService {
       throw new Error('タスクの削除に失敗しました');
     }
   }
+
+  /**
+   * TODOを更新
+   */
+  static async updateTodo(todoId: string, updates: Partial<TodoItem>): Promise<void> {
+    try {
+      const todoDoc = doc(db, 'todos', todoId);
+      await updateDoc(todoDoc, {
+        ...updates,
+        updatedAt: serverTimestamp()
+      });
+    } catch (error) {
+      console.error('Error updating todo:', error);
+      throw new Error('タスクの更新に失敗しました');
+    }
+  }
   /**
    * 解析結果を保存
    */
@@ -96,6 +114,9 @@ export class AnalysisService {
     imageDataUrl?: string
   ): Promise<string> {
     try {
+      console.log('Saving analysis for user:', userId);
+      console.log('Extracted data:', extractedData);
+
       const analysisRecord: Omit<AnalysisRecord, 'id'> = {
         userId,
         originalText,
@@ -108,22 +129,40 @@ export class AnalysisService {
         tags: []
       };
 
+      console.log('Creating analysis document...');
       const docRef = await addDoc(collection(db, 'analyses'), {
         ...analysisRecord,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       });
 
-      // TODOアイテムとして保存
-      await this.extractAndSaveTodos(userId, docRef.id, extractedData);
+      console.log('Analysis document created with ID:', docRef.id);
 
-      // 通知を生成
-      await this.generateNotifications(userId, docRef.id, extractedData);
+      // TODOアイテムとして保存（エラーがあっても続行）
+      try {
+        await this.extractAndSaveTodos(userId, docRef.id, extractedData);
+        console.log('TODOs saved successfully');
+      } catch (todoError) {
+        console.warn('Error saving TODOs (continuing):', todoError);
+      }
+
+      // 通知を生成（エラーがあっても続行）
+      try {
+        await this.generateNotifications(userId, docRef.id, extractedData);
+        console.log('Notifications generated successfully');
+      } catch (notificationError) {
+        console.warn('Error generating notifications (continuing):', notificationError);
+      }
 
       return docRef.id;
     } catch (error) {
       console.error('Error saving analysis:', error);
-      throw new Error('解析結果の保存に失敗しました');
+      console.error('Error details:', {
+        message: error.message,
+        code: error.code,
+        stack: error.stack
+      });
+      throw new Error(`解析結果の保存に失敗しました: ${error.message}`);
     }
   }
 
@@ -162,36 +201,59 @@ export class AnalysisService {
     extractedData: ClassNewsletterSchema
   ): Promise<void> {
     try {
+      console.log('Extracting TODOs from:', extractedData);
       const todos: Omit<TodoItem, 'id'>[] = [];
 
-      // actionsからTODOを抽出
-      extractedData.actions?.forEach(action => {
-        if (action.type === 'todo' || action.due_date) {
-          todos.push({
-            userId,
-            analysisId,
-            title: action.event_name || '未定のタスク',
-            description: action.notes || undefined,
-            dueDate: action.due_date ? new Date(action.due_date) : undefined,
-            priority: action.importance === 'high' ? 'high' : 
-                     action.importance === 'low' ? 'low' : 'medium',
-            completed: false,
-            createdAt: new Date(),
-            updatedAt: new Date()
-          });
-        }
-      });
+      // actionsが存在し、配列の場合のみ処理
+      if (extractedData.actions && Array.isArray(extractedData.actions)) {
+        extractedData.actions.forEach((action, index) => {
+          try {
+            if (action && (action.type === 'todo' || action.due_date)) {
+              const dueDate = action.due_date ? new Date(action.due_date) : undefined;
+              
+              // 日付が有効かチェック
+              if (dueDate && isNaN(dueDate.getTime())) {
+                console.warn(`Invalid date for action ${index}:`, action.due_date);
+                return; // この要素はスキップ
+              }
 
-      // TODOsを個別に保存
-      for (const todo of todos) {
-        await addDoc(collection(db, 'todos'), {
-          ...todo,
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp()
+              todos.push({
+                userId,
+                analysisId,
+                title: action.event_name || '未定のタスク',
+                description: action.notes || undefined,
+                dueDate,
+                priority: action.importance === 'high' ? 'high' : 
+                         action.importance === 'low' ? 'low' : 'medium',
+                completed: false,
+                createdAt: new Date(),
+                updatedAt: new Date()
+              });
+            }
+          } catch (actionError) {
+            console.warn(`Error processing action ${index}:`, actionError);
+          }
         });
       }
+
+      console.log(`Found ${todos.length} TODOs to save`);
+
+      // TODOsを個別に保存
+      for (const [index, todo] of todos.entries()) {
+        try {
+          await addDoc(collection(db, 'todos'), {
+            ...todo,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp()
+          });
+          console.log(`TODO ${index + 1} saved successfully`);
+        } catch (todoSaveError) {
+          console.warn(`Error saving TODO ${index + 1}:`, todoSaveError);
+        }
+      }
     } catch (error) {
-      console.error('Error saving todos:', error);
+      console.error('Error in extractAndSaveTodos:', error);
+      throw error;
     }
   }
 

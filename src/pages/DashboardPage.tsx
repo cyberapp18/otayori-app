@@ -15,28 +15,51 @@ const DashboardPage: React.FC = () => {
   // 新規TODOフォーム用
   const [newTodoTitle, setNewTodoTitle] = useState('');
   const [newTodoDescription, setNewTodoDescription] = useState('');
+  const [newTodoDueDate, setNewTodoDueDate] = useState('');
+  const [newTodoAssignedTo, setNewTodoAssignedTo] = useState('');
   const [addingTodo, setAddingTodo] = useState(false);
-  // タスク削除
-  const handleDeleteTodo = async (todoId: string) => {
-    if (!window.confirm('このタスクを削除しますか？')) return;
+
+  // 編集用状態
+  const [editingTodo, setEditingTodo] = useState<TodoItem | null>(null);
+  const [editTitle, setEditTitle] = useState('');
+  const [editDescription, setEditDescription] = useState('');
+  const [editDueDate, setEditDueDate] = useState('');
+  const [editAssignedTo, setEditAssignedTo] = useState('');
+  const [editPriority, setEditPriority] = useState<'high' | 'medium' | 'low'>('medium');
+
+  // 家族メンバー一覧（実際には家族サービスから取得）
+  const [familyMembers] = useState([
+    { id: user?.uid || '', name: user?.displayName || 'あなた' },
+    { id: 'family1', name: 'パパ' },
+    { id: 'family2', name: 'ママ' },
+    { id: 'family3', name: '子ども' }
+  ]);
+  // タスク削除（確認ポップアップ付き）
+  const handleDeleteTodo = async (todoId: string, todoTitle: string) => {
+    if (!window.confirm(`「${todoTitle}」を削除しますか？\nこの操作は取り消せません。`)) return;
     try {
       await AnalysisService.deleteTodo(todoId);
       setTodos(prev => prev.filter(todo => todo.id !== todoId));
     } catch (error) {
       console.error('Failed to delete todo:', error);
+      alert('タスクの削除に失敗しました。');
     }
   };
 
-  // タスク追加
+  // タスク追加（拡張版）
   const handleAddTodo = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTodoTitle.trim()) return;
     setAddingTodo(true);
     try {
+      const assignedMember = familyMembers.find(m => m.id === newTodoAssignedTo);
       const todoId = await AnalysisService.addUserTodo(user.uid, {
         title: newTodoTitle,
         description: newTodoDescription,
-        priority: 'low',
+        dueDate: newTodoDueDate ? new Date(newTodoDueDate) : undefined,
+        assignedTo: newTodoAssignedTo || user.uid,
+        assignedToName: assignedMember?.name || 'あなた',
+        priority: 'medium',
         completed: false,
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -44,16 +67,88 @@ const DashboardPage: React.FC = () => {
         analysisId: ''
       });
       setTodos(prev => [
-        { id: todoId, title: newTodoTitle, description: newTodoDescription, priority: 'low', completed: false, createdAt: new Date(), updatedAt: new Date(), userId: user.uid, analysisId: '' },
+        { 
+          id: todoId, 
+          title: newTodoTitle, 
+          description: newTodoDescription,
+          dueDate: newTodoDueDate ? new Date(newTodoDueDate) : undefined,
+          assignedTo: newTodoAssignedTo || user.uid,
+          assignedToName: assignedMember?.name || 'あなた',
+          priority: 'medium', 
+          completed: false, 
+          createdAt: new Date(), 
+          updatedAt: new Date(), 
+          userId: user.uid, 
+          analysisId: '' 
+        },
         ...prev
       ]);
       setNewTodoTitle('');
       setNewTodoDescription('');
+      setNewTodoDueDate('');
+      setNewTodoAssignedTo('');
     } catch (error) {
       console.error('Failed to add todo:', error);
+      alert('タスクの追加に失敗しました。');
     } finally {
       setAddingTodo(false);
     }
+  };
+
+  // 編集開始
+  const handleEditStart = (todo: TodoItem) => {
+    setEditingTodo(todo);
+    setEditTitle(todo.title);
+    setEditDescription(todo.description || '');
+    setEditDueDate(todo.dueDate ? todo.dueDate.toISOString().split('T')[0] : '');
+    setEditAssignedTo(todo.assignedTo || user.uid);
+    setEditPriority(todo.priority);
+  };
+
+  // 編集保存
+  const handleEditSave = async () => {
+    if (!editingTodo || !editTitle.trim()) return;
+    try {
+      const assignedMember = familyMembers.find(m => m.id === editAssignedTo);
+      await AnalysisService.updateTodo(editingTodo.id!, {
+        title: editTitle,
+        description: editDescription,
+        dueDate: editDueDate ? new Date(editDueDate) : undefined,
+        assignedTo: editAssignedTo,
+        assignedToName: assignedMember?.name || 'あなた',
+        priority: editPriority,
+        updatedAt: new Date()
+      });
+      
+      setTodos(prev => prev.map(todo => 
+        todo.id === editingTodo.id 
+          ? {
+              ...todo,
+              title: editTitle,
+              description: editDescription,
+              dueDate: editDueDate ? new Date(editDueDate) : undefined,
+              assignedTo: editAssignedTo,
+              assignedToName: assignedMember?.name || 'あなた',
+              priority: editPriority,
+              updatedAt: new Date()
+            }
+          : todo
+      ));
+      setEditingTodo(null);
+    } catch (error) {
+      console.error('Failed to update todo:', error);
+      alert('タスクの更新に失敗しました。');
+    }
+  };
+
+  // 編集キャンセル
+  const handleEditCancel = () => {
+    setEditingTodo(null);
+    setEditTitle('');
+    setEditDescription('');
+    setEditDueDate('');
+    setEditAssignedTo('');
+    setEditPriority('medium');
   };
 
   // データを読み込み
@@ -225,90 +320,157 @@ const DashboardPage: React.FC = () => {
           <div className="lg:col-span-1">
             <div className="bg-white rounded-lg shadow-md p-6">
               {/* 新規TODO追加フォーム */}
-              <form onSubmit={handleAddTodo} className="mb-4 flex flex-col gap-2">
+              <form onSubmit={handleAddTodo} className="mb-6 space-y-3 border-b pb-4">
+                <h4 className="font-semibold text-gray-800">新しいタスクを追加</h4>
                 <input
                   type="text"
-                  className="border rounded px-2 py-1 w-full"
-                  placeholder="新しいタスクのタイトル"
+                  className="border border-gray-300 rounded px-3 py-2 w-full focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                  placeholder="タスク名"
                   value={newTodoTitle}
                   onChange={e => setNewTodoTitle(e.target.value)}
-                  maxLength={40}
+                  maxLength={50}
                   required
                 />
-                <input
-                  type="text"
-                  className="border rounded px-2 py-1 w-full"
+                <textarea
+                  className="border border-gray-300 rounded px-3 py-2 w-full h-20 resize-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
                   placeholder="詳細 (任意)"
                   value={newTodoDescription}
                   onChange={e => setNewTodoDescription(e.target.value)}
-                  maxLength={100}
+                  maxLength={200}
                 />
+                <div className="grid grid-cols-2 gap-2">
+                  <input
+                    type="date"
+                    className="border border-gray-300 rounded px-3 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                    value={newTodoDueDate}
+                    onChange={e => setNewTodoDueDate(e.target.value)}
+                  />
+                  <select
+                    className="border border-gray-300 rounded px-3 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                    value={newTodoAssignedTo}
+                    onChange={e => setNewTodoAssignedTo(e.target.value)}
+                  >
+                    <option value="">担当者を選択</option>
+                    {familyMembers.map(member => (
+                      <option key={member.id} value={member.id}>{member.name}</option>
+                    ))}
+                  </select>
+                </div>
                 <button
                   type="submit"
-                  className="bg-green-500 text-white rounded px-3 py-1 mt-1 hover:bg-green-600 disabled:opacity-50"
+                  className="bg-orange-500 text-white rounded px-4 py-2 hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed w-full"
                   disabled={addingTodo || !newTodoTitle.trim()}
                 >
                   {addingTodo ? '追加中...' : 'タスク追加'}
                 </button>
               </form>
+
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center">
                   <div className="bg-green-100 p-3 rounded-lg">
                     <ClockIcon className="h-6 w-6 text-green-600" />
                   </div>
                   <div className="ml-4">
-                    <h3 className="text-lg font-semibold text-gray-900">今日のタスク</h3>
+                    <h3 className="text-lg font-semibold text-gray-900">TODOリスト</h3>
                     <p className="text-sm text-gray-600">
-                      {todos.length > 0 ? `${todos.length}件のタスクがあります` : 'タスクはありません'}
+                      {todos.length > 0 ? `${todos.filter(t => !t.completed).length}件の未完了タスク` : 'タスクはありません'}
                     </p>
                   </div>
                 </div>
               </div>
+
               {dataLoading ? (
                 <div className="flex justify-center py-4">
                   <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-green-500"></div>
                 </div>
               ) : todos.length > 0 ? (
-                <div className="space-y-3 max-h-60 overflow-y-auto">
-                  {todos.slice(0, 5).map((todo) => (
-                    <div key={todo.id} className="flex items-start space-x-3 p-3 border border-gray-200 rounded-lg">
-                      <button
-                        onClick={() => handleToggleTodo(todo.id!)}
-                        className="mt-0.5 text-green-600 hover:text-green-800"
-                        title="完了にする"
-                      >
-                        <CheckIcon className="w-4 h-4" />
-                      </button>
-                      <div className="flex-1">
-                        <h4 className="text-sm font-semibold text-gray-800">{todo.title}</h4>
-                        {todo.description && (
-                          <p className="text-xs text-gray-600 mt-1">{todo.description}</p>
-                        )}
-                        {todo.dueDate && (
-                          <p className="text-xs text-red-600 mt-1">
-                            期限: {todo.dueDate.toLocaleDateString('ja-JP')}
-                          </p>
-                        )}
+                <div className="space-y-3 max-h-96 overflow-y-auto">
+                  {todos.map((todo) => (
+                    <div 
+                      key={todo.id} 
+                      className={`border rounded-lg p-4 transition-all ${
+                        todo.completed 
+                          ? 'bg-gray-50 border-gray-200 opacity-60' 
+                          : 'bg-white border-gray-300 hover:border-orange-300'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <h4 className={`font-semibold ${todo.completed ? 'line-through text-gray-500' : 'text-gray-800'}`}>
+                            {todo.title}
+                          </h4>
+                          {todo.description && (
+                            <p className={`text-sm mt-1 ${todo.completed ? 'text-gray-400' : 'text-gray-600'}`}>
+                              {todo.description}
+                            </p>
+                          )}
+                          <div className="flex items-center gap-3 mt-2">
+                            {todo.dueDate && (
+                              <span className={`text-xs px-2 py-1 rounded ${
+                                todo.completed 
+                                  ? 'bg-gray-100 text-gray-400'
+                                  : todo.dueDate < new Date() 
+                                    ? 'bg-red-100 text-red-700' 
+                                    : 'bg-blue-100 text-blue-700'
+                              }`}>
+                                期限: {todo.dueDate.toLocaleDateString('ja-JP')}
+                              </span>
+                            )}
+                            {todo.assignedToName && (
+                              <span className={`text-xs px-2 py-1 rounded ${
+                                todo.completed 
+                                  ? 'bg-gray-100 text-gray-400'
+                                  : 'bg-green-100 text-green-700'
+                              }`}>
+                                担当: {todo.assignedToName}
+                              </span>
+                            )}
+                            <span className={`text-xs px-2 py-1 rounded ${
+                              todo.completed 
+                                ? 'bg-gray-100 text-gray-400'
+                                : todo.priority === 'high' 
+                                  ? 'bg-red-100 text-red-700' 
+                                  : todo.priority === 'medium' 
+                                    ? 'bg-yellow-100 text-yellow-700' 
+                                    : 'bg-gray-100 text-gray-700'
+                            }`}>
+                              {todo.priority === 'high' ? '高' : todo.priority === 'medium' ? '中' : '低'}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1 ml-2">
+                          <button
+                            onClick={() => handleToggleTodo(todo.id!)}
+                            className={`p-1 rounded transition-colors ${
+                              todo.completed 
+                                ? 'text-gray-400 hover:text-gray-600' 
+                                : 'text-green-600 hover:text-green-800'
+                            }`}
+                            title={todo.completed ? '未完了にする' : '完了にする'}
+                          >
+                            <CheckIcon className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleEditStart(todo)}
+                            className="p-1 text-blue-600 hover:text-blue-800 transition-colors"
+                            title="編集"
+                          >
+                            ✏️
+                          </button>
+                          <button
+                            onClick={() => handleDeleteTodo(todo.id!, todo.title)}
+                            className="p-1 text-red-600 hover:text-red-800 transition-colors"
+                            title="削除"
+                          >
+                            🗑️
+                          </button>
+                        </div>
                       </div>
-                      <span className={`text-xs px-2 py-1 rounded-full ${
-                        todo.priority === 'high' ? 'bg-red-100 text-red-700' :
-                        todo.priority === 'medium' ? 'bg-yellow-100 text-yellow-700' :
-                        'bg-gray-100 text-gray-700'
-                      }`}>
-                        {todo.priority === 'high' ? '高' : todo.priority === 'medium' ? '中' : '低'}
-                      </span>
-                      <button
-                        onClick={() => handleDeleteTodo(todo.id!)}
-                        className="ml-2 text-gray-400 hover:text-red-500"
-                        title="削除"
-                      >
-                        ×
-                      </button>
                     </div>
                   ))}
                 </div>
               ) : (
-                <p className="text-sm text-gray-500 text-center py-4">現在のタスクはありません</p>
+                <p className="text-sm text-gray-500 text-center py-8">現在のタスクはありません</p>
               )}
             </div>
           </div>
@@ -392,6 +554,87 @@ const DashboardPage: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* TODO編集モーダル */}
+      {editingTodo && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">タスクを編集</h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">タスク名 *</label>
+                  <input
+                    type="text"
+                    className="w-full border border-gray-300 rounded px-3 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                    value={editTitle}
+                    onChange={e => setEditTitle(e.target.value)}
+                    maxLength={50}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">詳細</label>
+                  <textarea
+                    className="w-full border border-gray-300 rounded px-3 py-2 h-20 resize-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                    value={editDescription}
+                    onChange={e => setEditDescription(e.target.value)}
+                    maxLength={200}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">期限</label>
+                  <input
+                    type="date"
+                    className="w-full border border-gray-300 rounded px-3 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                    value={editDueDate}
+                    onChange={e => setEditDueDate(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">実施担当</label>
+                  <select
+                    className="w-full border border-gray-300 rounded px-3 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                    value={editAssignedTo}
+                    onChange={e => setEditAssignedTo(e.target.value)}
+                  >
+                    {familyMembers.map(member => (
+                      <option key={member.id} value={member.id}>{member.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">優先度</label>
+                  <select
+                    className="w-full border border-gray-300 rounded px-3 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                    value={editPriority}
+                    onChange={e => setEditPriority(e.target.value as 'high' | 'medium' | 'low')}
+                  >
+                    <option value="low">低</option>
+                    <option value="medium">中</option>
+                    <option value="high">高</option>
+                  </select>
+                </div>
+              </div>
+              <div className="flex gap-3 mt-6">
+                <button
+                  onClick={handleEditCancel}
+                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded hover:bg-gray-50 transition-colors"
+                >
+                  キャンセル
+                </button>
+                <button
+                  onClick={handleEditSave}
+                  className="flex-1 px-4 py-2 bg-orange-500 text-white rounded hover:bg-orange-600 transition-colors disabled:opacity-50"
+                  disabled={!editTitle.trim()}
+                >
+                  保存
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

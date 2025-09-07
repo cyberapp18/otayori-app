@@ -181,6 +181,7 @@ const UploadPage: React.FC = () => {
     if (!extractedData || !rawText) return;
     try {
       setIsSubmitting(true);
+      console.log('🚀 Starting confirm process...');
 
       if (!isAuthenticated) {
         alert("AIによる分析が完了しました！\nログインすると、この情報を保存して家族と共有できます。");
@@ -188,11 +189,22 @@ const UploadPage: React.FC = () => {
         return;
       }
 
+      console.log('✅ User authenticated:', user?.uid);
+
       // 使用量をインクリメント（認証済みユーザーのみ）
       if (user) {
+        console.log('📊 Incrementing usage...');
         await UserService.incrementUsage(user.uid);
-        console.log('Usage incremented for user:', user.uid);
+        console.log('✅ Usage incremented for user:', user.uid);
         
+        console.log('💾 Saving analysis...', {
+          userId: user.uid,
+          rawTextLength: rawText.length,
+          extractedData,
+          selectedChildIds,
+          hasImageData: !!imageDataUrl
+        });
+
         // 解析結果を保存
         const analysisId = await AnalysisService.saveAnalysis(
           user.uid,
@@ -201,15 +213,17 @@ const UploadPage: React.FC = () => {
           selectedChildIds,
           imageDataUrl || undefined
         );
-        console.log('Analysis saved with ID:', analysisId);
-      }
+        console.log('✅ Analysis saved with ID:', analysisId);
 
-      // TODO: 実際のデータ保存機能はここで実装
-      console.log("保存機能は後で実装します", { extractedData, rawText, selectedChildIds });
+        // 保存成功メッセージ
+        alert('解析結果が正常に保存されました！ダッシュボードで確認できます。');
+      }
       
+      console.log('🎯 Navigating to dashboard...');
       navigate("/dashboard");
     } catch (e) {
-      setError((e as Error).message);
+      console.error('❌ Error in handleConfirm:', e);
+      setError(`保存に失敗しました: ${(e as Error).message}`);
       setStep(UploadStep.Error);
     } finally {
       setIsSubmitting(false);
