@@ -82,97 +82,33 @@ const UploadPage: React.FC = () => {
     try {
       setImageDataUrl(dataUrl);
       setStep(UploadStep.ProcessingOCR);
+      setStartTime(Date.now());
 
-      // 暫定的なモックデータでテスト
-      console.log('Using mock data for testing...');
-      await new Promise(resolve => setTimeout(resolve, 1500)); // OCRの時間をシミュレート
+      // 実際のOCRを実行
+      console.log('Starting OCR processing...');
+      const ocrResult = await performOCR(file);
+      console.log('OCR completed, text length:', ocrResult.length);
       
-      const mockOcrText = `
-      さくら組の保護者の皆様へ
+      if (!ocrResult || ocrResult.trim().length === 0) {
+        throw new Error('画像からテキストを抽出できませんでした。');
+      }
       
-      2024年9月のお知らせ
-      
-      ■今月の行事予定
-      9月15日（日） 運動会（雨天時：9月22日）
-      9月20日（金） 授業参観　午前10時～
-      
-      ■持ち物のお願い
-      ・運動会用の体操服（白いシャツと紺のハーフパンツ）
-      ・水筒（お茶または水のみ）
-      ・タオル
-      
-      ■提出物
-      9月10日（火）までに
-      ・健康カード
-      ・運動会参加同意書
-      
-      ご不明な点がございましたら、担任までお声かけください。
-      `;
-      
-      setRawText(mockOcrText);
+      setRawText(ocrResult);
       setStep(UploadStep.ProcessingAI);
 
-      await new Promise(resolve => setTimeout(resolve, 1000)); // AI分析の時間をシミュレート
+      // 実際のAI解析を実行
+      console.log('Starting AI analysis...');
+      const aiResult = await extractClassNewsletterData(ocrResult);
+      console.log('AI analysis completed:', aiResult);
       
-      const mockExtractedData = {
-        header: {
-          title: "9月のお知らせ",
-          class_name: "さくら組",
-          school_name: null,
-          issue_month: "2024-09",
-          issue_date: "2024-09-01"
-        },
-        overview: "9月の運動会と授業参観についてのお知らせです。運動会は9月15日、授業参観は9月20日に開催されます。必要な持ち物や提出物についても記載されています。",
-        key_points: [
-          "運動会：9月15日（雨天時9月22日）",
-          "授業参観：9月20日 午前10時～",
-          "体操服・水筒・タオルを持参",
-          "健康カード・同意書を9月10日までに提出"
-        ],
-        actions: [
-          {
-            type: "event",
-            event_name: "運動会",
-            event_date: "2024-09-15",
-            due_date: null,
-            items: ["体操服", "水筒", "タオル"],
-            notes: "雨天時は9月22日に延期",
-            confidence: { date: 0.9, due: 0.8, items: 0.9 }
-          },
-          {
-            type: "event",
-            event_name: "授業参観",
-            event_date: "2024-09-20",
-            due_date: null,
-            items: [],
-            notes: "午前10時開始",
-            confidence: { date: 0.9, due: 0.7, items: 0.7 }
-          },
-          {
-            type: "todo",
-            event_name: "提出物",
-            event_date: null,
-            due_date: "2024-09-10",
-            items: ["健康カード", "運動会参加同意書"],
-            notes: "担任まで提出",
-            confidence: { date: 0.7, due: 0.9, items: 0.9 }
-          }
-        ],
-        info: []
-      };
-      
-      console.log('Mock AI analysis completed:', mockExtractedData);
-
-      // XSS対策＋null対策
-      const sanitized = sanitizeObject(mockExtractedData) as ClassNewsletterSchema;
-      console.log('Sanitization completed:', sanitized);
-      setExtractedData(sanitized);
-
+      // サニタイズ
+      const sanitizedData = sanitizeObject(aiResult);
+      setExtractedData(sanitizedData);
       setStep(UploadStep.Preview);
-      console.log('Moving to preview step');
     } catch (e) {
       console.error('Error in handleFileSelect:', e);
-      setError((e as Error).message || '予期せぬエラーが発生しました');
+      const errorMessage = (e as Error).message || '予期せぬエラーが発生しました';
+      setError(errorMessage);
       setStep(UploadStep.Error);
     }
   };
@@ -211,7 +147,8 @@ const UploadPage: React.FC = () => {
           rawText,
           extractedData,
           selectedChildIds,
-          imageDataUrl || undefined
+          // 開発環境では画像データを渡さない
+          import.meta.env.DEV ? undefined : (imageDataUrl || undefined)
         );
         console.log('✅ Analysis saved with ID:', analysisId);
 

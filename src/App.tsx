@@ -11,6 +11,7 @@ import SignUpPage from './pages/SignUpPage';
 import EmailVerificationPage from './pages/EmailVerificationPage';
 import UploadPage from './pages/UploadPage';
 import NoticeDetailPage from './pages/NoticeDetailPage';
+import AnalysisDetailPage from './pages/AnalysisDetailPage';
 import SettingsPage from './pages/SettingsPage';
 import LandingPage from './pages/LandingPage';
 import PrivacyPolicyPage from './pages/PrivacyPolicyPage';
@@ -117,6 +118,11 @@ const App: React.FC = () => {
                 
                 {/* アップロードページは未ログインでもアクセス可能 */}
                 <Route path="/upload" element={<UploadPage />} />
+                <Route path="/analysis/:id" element={
+                  <ProtectedRoute>
+                    <AnalysisDetailPage />
+                  </ProtectedRoute>
+                } />
                 <Route path="/notice/:id" element={
                   <ProtectedRoute>
                     <NoticeDetailPage />

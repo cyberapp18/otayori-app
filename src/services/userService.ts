@@ -111,16 +111,34 @@ export class UserService {
       const data = userSnap.data();
       console.log('Firestoreから取得したデータ:', data);
       
+      // プランタイプを先に決定
+      const planType = data.planType || 'free';
+      
+      // プランに基づく月間制限を計算
+      let monthlyLimit = data.monthlyLimit;
+      if (!monthlyLimit) {
+        switch (planType) {
+          case 'standard':
+            monthlyLimit = 30;
+            break;
+          case 'pro':
+            monthlyLimit = 200;
+            break;
+          default:
+            monthlyLimit = 4;
+        }
+      }
+      
       const profile = {
-        uid: data.uid,
-        email: data.email,
-        displayName: data.displayName,
-        emailVerified: data.emailVerified,
+        uid: data.uid || userId,
+        email: data.email || '',
+        displayName: data.displayName || 'ユーザー',
+        emailVerified: data.emailVerified || false,
         createdAt: data.createdAt?.toDate() || new Date(),
         updatedAt: data.updatedAt?.toDate(),
-        isActive: data.isActive,
-        planType: data.planType || 'free',
-        monthlyLimit: data.monthlyLimit || (data.planType === 'standard' ? 30 : data.planType === 'pro' ? 200 : 4),
+        isActive: data.isActive !== false, // デフォルトtrue
+        planType: planType,
+        monthlyLimit: monthlyLimit,
         currentMonthUsage: data.currentMonthUsage || 0,
         lastResetDate: data.lastResetDate?.toDate() || new Date(),
         
@@ -131,6 +149,17 @@ export class UserService {
       } as UserProfile;
       
       console.log('構築したプロフィール:', profile);
+      
+      // データが不完全な場合、Firestoreを更新
+      if (!data.planType || !data.monthlyLimit) {
+        console.log('不完全なデータを検出。Firestoreを更新します。');
+        await updateDoc(userRef, {
+          planType: profile.planType,
+          monthlyLimit: profile.monthlyLimit,
+          updatedAt: serverTimestamp()
+        });
+      }
+      
       return profile;
     } catch (error) {
       console.error('Error fetching user profile:', error);
@@ -304,6 +333,50 @@ export class UserService {
       monthlyLimit: settings.monthlyLimit,
       updatedAt: serverTimestamp()
     });
+  }
+
+  /**
+   * プラン変更（トライアル情報付き）
+   */
+  static async changePlanWithTrial(
+    userId: string, 
+    planType: 'free' | 'standard' | 'pro',
+    trialEndDate?: Date,
+    stripeCustomerId?: string,
+    stripeSubscriptionId?: string
+  ): Promise<void> {
+    const userRef = doc(db, 'customers', userId);
+    
+    // プランごとの制限設定
+    const planSettings = {
+      free: { monthlyLimit: 4, planType: 'free' },
+      standard: { monthlyLimit: 30, planType: 'standard' },
+      pro: { monthlyLimit: 200, planType: 'pro' }
+    };
+    
+    const settings = planSettings[planType];
+    
+    const updateData: any = {
+      planType: settings.planType,
+      monthlyLimit: settings.monthlyLimit,
+      updatedAt: serverTimestamp()
+    };
+
+    // トライアル情報を追加
+    if (trialEndDate) {
+      updateData.trialEndDate = trialEndDate;
+      updateData.isTrialActive = true;
+    }
+
+    // Stripe情報を追加
+    if (stripeCustomerId) {
+      updateData.stripeCustomerId = stripeCustomerId;
+    }
+    if (stripeSubscriptionId) {
+      updateData.stripeSubscriptionId = stripeSubscriptionId;
+    }
+    
+    await updateDoc(userRef, updateData);
   }
 
   /**

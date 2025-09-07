@@ -229,6 +229,43 @@ const DashboardPage: React.FC = () => {
     }
   }, [isAuthenticated, user, isLoading]);
 
+  // 解析完了後のデータ更新用イベントリスナー
+  useEffect(() => {
+    const handleAnalysisComplete = () => {
+      console.log('解析完了イベントを受信、ダッシュボードデータを再読み込み');
+      loadDashboardData();
+    };
+
+    const handleTodoUpdated = () => {
+      console.log('TODO更新イベントを受信、ダッシュボードデータを再読み込み');
+      loadDashboardData();
+    };
+
+    const handleTodoAdded = () => {
+      console.log('TODO追加イベントを受信、ダッシュボードデータを再読み込み');
+      loadDashboardData();
+    };
+
+    const handleTodoDeleted = () => {
+      console.log('TODO削除イベントを受信、ダッシュボードデータを再読み込み');
+      loadDashboardData();
+    };
+
+    // カスタムイベントリスナーを追加
+    window.addEventListener('analysisComplete', handleAnalysisComplete);
+    window.addEventListener('todoUpdated', handleTodoUpdated);
+    window.addEventListener('todoAdded', handleTodoAdded);
+    window.addEventListener('todoDeleted', handleTodoDeleted);
+
+    // クリーンアップ
+    return () => {
+      window.removeEventListener('analysisComplete', handleAnalysisComplete);
+      window.removeEventListener('todoUpdated', handleTodoUpdated);
+      window.removeEventListener('todoAdded', handleTodoAdded);
+      window.removeEventListener('todoDeleted', handleTodoDeleted);
+    };
+  }, [user]);
+
   if (isLoading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -569,7 +606,11 @@ const DashboardPage: React.FC = () => {
               ) : recentAnalyses.length > 0 ? (
                 <div className="space-y-3 max-h-60 overflow-y-auto">
                   {recentAnalyses.map((analysis) => (
-                    <div key={analysis.id} className="border border-gray-200 rounded-lg p-3">
+                    <Link 
+                      key={analysis.id} 
+                      to={`/analysis/${analysis.id}`}
+                      className="block border border-gray-200 rounded-lg p-3 hover:bg-gray-50 hover:border-gray-300 transition-colors"
+                    >
                       <h4 className="text-sm font-semibold text-gray-800 mb-1">
                         {analysis.extractedData?.header?.title || '無題のおたより'}
                       </h4>
@@ -586,7 +627,7 @@ const DashboardPage: React.FC = () => {
                           {analysis.extractedData.actions.length}件のアクション項目
                         </p>
                       )}
-                    </div>
+                    </Link>
                   ))}
                 </div>
               ) : (

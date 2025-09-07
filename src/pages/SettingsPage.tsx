@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { updateProfile, updateEmail } from 'firebase/auth';
+import { getFirestore, doc, setDoc } from 'firebase/firestore';
 import { useAppContext } from '../AppContext';
 import { FamilyService } from '../services/familyService';
 import { UserService } from '../services/userService';
@@ -13,7 +14,7 @@ import QRCode from 'qrcode';
 type SettingsTab = 'family' | 'account' | 'notifications';
 
 const SettingsPage: React.FC = () => {
-  const { user, userProfile, family, refreshFamily, familyLoading, logout } = useAppContext();
+  const { user, userProfile, family, refreshFamily, familyLoading, logout, refreshProfile } = useAppContext();
   const [activeTab, setActiveTab] = useState<SettingsTab>('family');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -145,7 +146,8 @@ const SettingsPage: React.FC = () => {
     }
   };
 
-  // プラン変更処理
+  // プラン変更処理（Stripe Checkoutを使用）
+  // プラン変更処理（開発環境用：直接プラン変更、本番環境：Stripe Checkout）
   const handlePlanChange = async () => {
     if (!user) return;
     
@@ -153,12 +155,52 @@ const SettingsPage: React.FC = () => {
     setError(null);
     
     try {
-      await UserService.changePlan(user.uid, selectedPlan);
-      setShowPlanChangeModal(false);
-      window.location.reload(); // 簡単な実装として再読み込み
+      // 開発環境では直接プラン変更を実行
+      const isDevelopment = import.meta.env.DEV || window.location.hostname === 'localhost';
+      
+      if (isDevelopment) {
+        // 開発環境：UserServiceで直接プラン変更
+        console.log('開発環境：直接プラン変更を実行');
+        
+        // トライアル期間を設定（14日後）
+        const trialEndDate = new Date();
+        trialEndDate.setDate(trialEndDate.getDate() + 14);
+        
+        // プランを変更（トライアル情報付き）
+        await UserService.changePlanWithTrial(
+          user.uid, 
+          selectedPlan, 
+          trialEndDate,
+          undefined, // stripeCustomerId (開発環境では未使用)
+          undefined  // stripeSubscriptionId (開発環境では未使用)
+        );
+        
+        setShowPlanChangeModal(false);
+        
+        // プロファイルを再読み込み
+        if (refreshProfile) {
+          await refreshProfile();
+        }
+        
+        alert(`${selectedPlan === 'standard' ? 'スタンダード' : 'プロ'}プランの14日間無料トライアルが開始されました！`);
+        window.location.reload();
+      } else {
+        // 本番環境：Stripe Checkoutを使用
+        console.log('本番環境：Stripe Checkoutを実行');
+        const { startCheckout } = await import('../services/checkoutService');
+        const { STRIPE_PRICES } = await import('../services/stripe');
+        
+        // プランに応じた価格IDを設定
+        const priceId = STRIPE_PRICES[selectedPlan].priceId;
+        
+        // Stripe Checkoutセッションを開始（14日トライアル付き）
+        await startCheckout(priceId, selectedPlan);
+        
+        setShowPlanChangeModal(false);
+      }
     } catch (err) {
       console.error('プラン変更エラー:', err);
-      setError('プランの変更に失敗しました。');
+      setError(err instanceof Error ? err.message : 'プランの変更に失敗しました。');
     } finally {
       setIsLoading(false);
     }
@@ -225,6 +267,59 @@ const SettingsPage: React.FC = () => {
     } catch (err) {
       console.error('アカウント削除エラー:', err);
       setError('アカウントの削除に失敗しました。');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // テストパパ専用：プロフィール強制リセット（開発用）
+  const handleForceResetProfile = async () => {
+    if (!user || user.displayName !== 'テストパパ') return;
+    
+    setIsLoading(true);
+    try {
+      // Firestoreに直接プロフィールを作成/上書き
+      const userRef = doc(getFirestore(), 'customers', user.uid);
+      await setDoc(userRef, {
+        uid: user.uid,
+        email: user.email || 'test-papa@example.com',
+        displayName: user.displayName || 'テストパパ',
+        emailVerified: user.emailVerified || false,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        isActive: true,
+        
+        // プラン情報（無料プラン）
+        planType: 'free',
+        monthlyLimit: 4, // 無料プランは4回まで
+        
+        // 使用量（初期化）
+        currentMonthUsage: 0,
+        lastResetDate: new Date(),
+        
+        // 家族（初期は未所属）
+        familyRole: 'owner',
+        
+        // プロファイル詳細
+        profile: {
+          birthdate: '',
+          country: 'JP',
+          location: 'テスト用',
+        }
+      }, { merge: false }); // 既存データを完全に上書き
+
+      console.log('テストパパのプロフィールを強制作成しました');
+      
+      // AppContextのプロフィールを再読み込み
+      if (refreshProfile) {
+        await refreshProfile();
+      }
+      
+      alert('プロフィールを強制リセットしました。ページを再読み込みしてください。');
+      window.location.reload();
+    } catch (error) {
+      console.error('プロフィールリセットエラー:', error);
+      alert('プロフィールリセットに失敗しました。エラー: ' + error);
     } finally {
       setIsLoading(false);
     }
@@ -1079,6 +1174,25 @@ const SettingsPage: React.FC = () => {
       }
     };
 
+    // トライアル状況をチェック
+    const getTrialInfo = () => {
+      if (!userProfile?.trialEndDate || !userProfile?.isTrialActive) {
+        return null;
+      }
+
+      const trialEndDate = new Date(userProfile.trialEndDate);
+      const now = new Date();
+      const daysLeft = Math.ceil((trialEndDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+
+      return {
+        isActive: daysLeft > 0,
+        daysLeft: Math.max(0, daysLeft),
+        endDate: trialEndDate.toLocaleDateString('ja-JP')
+      };
+    };
+
+    const trialInfo = getTrialInfo();
+
     const getPlanFeatures = (planType: string) => {
       switch (planType) {
         case 'free':
@@ -1125,13 +1239,27 @@ const SettingsPage: React.FC = () => {
                 <p className="text-sm text-gray-600 mb-1">現在のご利用プラン</p>
                 <h3 className="text-lg font-semibold text-gray-800">
                   {getPlanName(userProfile?.planType || 'free')}
+                  {trialInfo?.isActive && (
+                    <span className="ml-2 px-2 py-1 text-xs bg-green-100 text-green-700 rounded-full">
+                      トライアル中
+                    </span>
+                  )}
                 </h3>
+                {/* トライアル情報 */}
+                {trialInfo?.isActive && (
+                  <p className="text-sm text-green-600 mt-1">
+                    無料トライアル残り{trialInfo.daysLeft}日（{trialInfo.endDate}まで）
+                  </p>
+                )}
               </div>
               <div className="text-right">
                 <div className="text-2xl font-bold text-orange-600">
                   {userProfile?.planType === 'free' ? '¥0/月' : 
                    userProfile?.planType === 'standard' ? '¥100/月' : '¥500/月'}
                 </div>
+                {trialInfo?.isActive && (
+                  <p className="text-sm text-green-600">今なら無料！</p>
+                )}
               </div>
             </div>
             
@@ -1182,25 +1310,42 @@ const SettingsPage: React.FC = () => {
                 onClick={() => openPlanChangeModal('standard')}
                 className="mr-4"
               >
-                スタンダードプランにアップグレード
+                スタンダード14日間無料トライアル
               </Button>
               <Button
                 variant="secondary"
                 onClick={() => openPlanChangeModal('pro')}
               >
-                プロプランにアップグレード
+                プロ14日間無料トライアル
               </Button>
             </div>
           )}
           
-          {userProfile?.planType === 'standard' && (
+          {userProfile?.planType === 'standard' && !trialInfo?.isActive && (
             <div className="text-center">
               <Button
                 variant="primary"
                 onClick={() => openPlanChangeModal('pro')}
               >
-                プロプランにアップグレード
+                プロ14日間無料トライアル
               </Button>
+            </div>
+          )}
+
+          {/* トライアル中の場合の表示 */}
+          {trialInfo?.isActive && (
+            <div className="text-center p-4 bg-green-50 border border-green-200 rounded-lg">
+              <h4 className="font-semibold text-green-800 mb-2">
+                🎉 14日間無料トライアル中！
+              </h4>
+              <p className="text-sm text-green-700 mb-3">
+                すべての機能を無料でお試しいただけます。
+                あと{trialInfo.daysLeft}日でトライアルが終了します。
+              </p>
+              <p className="text-xs text-green-600">
+                トライアル終了後は自動的に有料プランに移行します。
+                いつでもキャンセル可能です。
+              </p>
             </div>
           )}
 
@@ -1599,10 +1744,26 @@ const SettingsPage: React.FC = () => {
                 </div>
               </div>
 
-              <div className="bg-orange-50 border border-orange-200 p-3 rounded-lg">
-                <p className="text-sm text-orange-800">
-                  <strong>注意:</strong> プラン変更は即座に適用されます。
-                  {selectedPlan !== 'free' && ' 月末まで新プランでご利用いただけます。'}
+              {/* 無料トライアル情報 */}
+              <div className="bg-green-50 border border-green-200 p-4 rounded-lg mb-4">
+                <div className="flex items-center mb-2">
+                  <svg className="w-5 h-5 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  </svg>
+                  <h5 className="font-semibold text-green-800">14日間無料トライアル</h5>
+                </div>
+                <ul className="text-sm text-green-700 space-y-1">
+                  <li>• 最初の14日間は無料でお試しいただけます</li>
+                  <li>• トライアル期間中はすべての機能をご利用可能</li>
+                  <li>• いつでもキャンセル可能（料金はかかりません）</li>
+                  <li>• トライアル終了後、自動的に有料プランに移行</li>
+                </ul>
+              </div>
+
+              <div className="bg-blue-50 border border-blue-200 p-3 rounded-lg">
+                <p className="text-sm text-blue-800">
+                  <strong>📋 次のステップ:</strong> クレジットカード情報を登録してトライアルを開始します。
+                  トライアル期間中は料金が発生しません。
                 </p>
               </div>
             </div>
@@ -1614,7 +1775,7 @@ const SettingsPage: React.FC = () => {
                 disabled={isLoading}
                 className="flex-1"
               >
-                {isLoading ? '変更中...' : 'プラン変更を確定'}
+                {isLoading ? '処理中...' : '14日間無料トライアルを開始'}
               </Button>
               <Button
                 variant="secondary"
@@ -1768,12 +1929,31 @@ const SettingsPage: React.FC = () => {
           <div><strong>ユーザーID:</strong> {user?.uid}</div>
           <div><strong>メール:</strong> {user?.email}</div>
           <div><strong>表示名:</strong> {user?.displayName}</div>
-          <div><strong>プランタイプ:</strong> {userProfile?.planType || 'unknown'}</div>
+          <div><strong>userProfileオブジェクト:</strong> {userProfile ? 'あり' : '❌ なし'}</div>
+          <div><strong>プランタイプ:</strong> {userProfile?.planType || 'unknown'} 
+            {userProfile?.planType === undefined && ' (undefined)'}
+            {userProfile?.planType === null && ' (null)'}
+          </div>
           <div><strong>月間制限:</strong> {userProfile?.monthlyLimit || 'unknown'}</div>
           <div><strong>今月の使用量:</strong> {userProfile?.currentMonthUsage || 0}</div>
           <div><strong>家族ID:</strong> {userProfile?.familyId || 'なし'}</div>
           <div><strong>家族での役割:</strong> {userProfile?.familyRole || 'なし'}</div>
+          <div><strong>トライアル状況:</strong> {userProfile?.isTrialActive ? '✅ アクティブ' : '❌ 非アクティブ'}</div>
+          <div><strong>トライアル終了日:</strong> {userProfile?.trialEndDate ? new Date(userProfile.trialEndDate).toLocaleDateString('ja-JP') : 'なし'}</div>
+          <div><strong>環境:</strong> {import.meta.env.DEV ? '開発環境' : '本番環境'}</div>
           <div><strong>テストパパか？:</strong> {user?.displayName === 'テストパパ' ? '✅ Yes' : '❌ No'}</div>
+          <div><strong>RAWデータ:</strong> {JSON.stringify(userProfile, null, 2)}</div>
+          {user?.displayName === 'テストパパ' && (
+            <div className="mt-4 pt-4 border-t border-gray-300">
+              <button
+                onClick={handleForceResetProfile}
+                disabled={isLoading}
+                className="px-3 py-1 bg-red-500 text-white text-xs rounded hover:bg-red-600 disabled:opacity-50"
+              >
+                🔄 プロフィール強制リセット（テスト用）
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>

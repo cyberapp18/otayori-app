@@ -40,7 +40,7 @@ export const signup = async (user: User, password: string): Promise<void> => {
       displayName: user.username,
       email: user.email,
       planType: 'free',
-      monthlyLimit: 5,
+      monthlyLimit: 4, // 無料プランは4回まで
       currentMonthUsage: 0,
       lastResetDate: new Date(),
       createdAt: new Date(),

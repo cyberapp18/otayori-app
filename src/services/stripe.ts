@@ -14,10 +14,12 @@ export const STRIPE_PRICES = {
   standard: {
     monthly: 100, // JPY
     priceId: 'price_standard_monthly_jpy', // Stripe Dashboardで作成する際のID
+    trialDays: 14,
   },
   pro: {
-    monthly: 1000, // JPY
+    monthly: 500, // JPY（正しい価格に修正）
     priceId: 'price_pro_monthly_jpy', // Stripe Dashboardで作成する際のID
+    trialDays: 14,
   },
 } as const;
 

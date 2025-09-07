@@ -1,6 +1,7 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, connectAuthEmulator } from 'firebase/auth';
 import { getFirestore, connectFirestoreEmulator } from 'firebase/firestore';
+import { getStorage, connectStorageEmulator } from 'firebase/storage';
 
 // 環境変数の型安全なチェック
 const requiredEnvVars = {
@@ -26,6 +27,7 @@ console.log('projectId', import.meta.env.VITE_FIREBASE_PROJECT_ID);
 
 export const auth = getAuth(app);
 export const db = getFirestore(app);
+export const storage = getStorage(app);
 
 // 開発環境ではEmulatorに接続
 const isLocalhost = window.location.hostname === 'localhost' || 
@@ -33,7 +35,10 @@ const isLocalhost = window.location.hostname === 'localhost' ||
                    window.location.hostname.includes('192.168') ||
                    import.meta.env.DEV;
 
-if (isLocalhost) {
+// 本番Firestoreを使用するため、エミュレーター接続を無効化
+const USE_EMULATOR = false; // エミュレーターを使用する場合はtrueに変更
+
+if (isLocalhost && USE_EMULATOR) {
   console.log('🚀 Connecting to Firebase Emulators...');
   
   // Firestore Emulator接続
@@ -48,6 +53,18 @@ if (isLocalhost) {
       emulatorConnected = true;
     } else {
       console.warn('Firestore Emulator connection failed:', error.message);
+    }
+  }
+
+  // Storage Emulator接続
+  try {
+    connectStorageEmulator(storage, 'localhost', 9199);
+    console.log('✅ Connected to Storage Emulator');
+  } catch (error) {
+    if (error.message.includes('already connected')) {
+      console.log('✅ Already connected to Storage Emulator');
+    } else {
+      console.warn('Storage Emulator connection failed:', error.message);
     }
   }
   

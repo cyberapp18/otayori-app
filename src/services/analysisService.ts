@@ -2,6 +2,7 @@ import {
   collection, 
   addDoc, 
   getDocs, 
+  getDoc,
   query, 
   where, 
   orderBy, 
@@ -12,7 +13,8 @@ import {
   serverTimestamp,
   Timestamp 
 } from 'firebase/firestore';
-import { db } from './firebase';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { db, storage } from './firebase';
 import { ClassNewsletterSchema } from '../types';
 import { UserService } from './userService';
 
@@ -59,6 +61,60 @@ export interface NotificationItem {
 export class AnalysisService {
 
   /**
+   * undefinedフィールドを除外するヘルパー関数
+   */
+  private static removeUndefinedFields(obj: any): any {
+    const cleaned: any = {};
+    for (const [key, value] of Object.entries(obj)) {
+      if (value !== undefined) {
+        cleaned[key] = value;
+      }
+    }
+    return cleaned;
+  }
+
+  /**
+   * 画像データURLをFirebase Storageにアップロード
+   */
+  static async uploadImageDataUrl(userId: string, imageDataUrl: string): Promise<string> {
+    try {
+      // データURLをBlobに変換
+      const response = await fetch(imageDataUrl);
+      const blob = await response.blob();
+      
+      // ファイル名を生成（タイムスタンプ + ランダム文字列）
+      const timestamp = Date.now();
+      const randomId = Math.random().toString(36).substring(2);
+      const fileName = `analysis_${timestamp}_${randomId}.jpg`;
+      
+      // Firebase Storageの参照を作成
+      const storageRef = ref(storage, `analyses/${userId}/${fileName}`);
+      
+      // ファイルをアップロード
+      await uploadBytes(storageRef, blob);
+      
+      // ダウンロードURLを取得
+      const downloadURL = await getDownloadURL(storageRef);
+      
+      console.log('Image uploaded to Storage:', downloadURL);
+      return downloadURL;
+    } catch (error) {
+      console.error('Error uploading image:', error);
+      
+      // 開発環境の場合はより詳細なエラー情報を出力
+      if (import.meta.env.DEV) {
+        console.error('Storage upload error details:', {
+          error,
+          message: error.message,
+          code: error.code
+        });
+      }
+      
+      throw new Error(`画像のアップロードに失敗しました: ${error.message}`);
+    }
+  }
+
+  /**
    * ユーザーのTODOを追加
    */
   static async addUserTodo(userId: string, todo: Omit<TodoItem, 'id'>): Promise<string> {
@@ -69,6 +125,18 @@ export class AnalysisService {
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
+
+      // ダッシュボード更新イベントを発火
+      try {
+        const event = new CustomEvent('todoAdded', {
+          detail: { todoId: docRef.id, userId }
+        });
+        window.dispatchEvent(event);
+        console.log('Todo added event dispatched');
+      } catch (eventError) {
+        console.warn('Error dispatching todo added event:', eventError);
+      }
+
       return docRef.id;
     } catch (error) {
       console.error('Error adding todo:', error);
@@ -83,6 +151,17 @@ export class AnalysisService {
     try {
       const todoDoc = doc(db, 'todos', todoId);
       await deleteDoc(todoDoc);
+
+      // ダッシュボード更新イベントを発火
+      try {
+        const event = new CustomEvent('todoDeleted', {
+          detail: { todoId }
+        });
+        window.dispatchEvent(event);
+        console.log('Todo deleted event dispatched');
+      } catch (eventError) {
+        console.warn('Error dispatching todo deleted event:', eventError);
+      }
     } catch (error) {
       console.error('Error deleting todo:', error);
       throw new Error('タスクの削除に失敗しました');
@@ -99,6 +178,17 @@ export class AnalysisService {
         ...updates,
         updatedAt: serverTimestamp()
       });
+
+      // ダッシュボード更新イベントを発火
+      try {
+        const event = new CustomEvent('todoUpdated', {
+          detail: { todoId, updates }
+        });
+        window.dispatchEvent(event);
+        console.log('Todo updated event dispatched');
+      } catch (eventError) {
+        console.warn('Error dispatching todo updated event:', eventError);
+      }
     } catch (error) {
       console.error('Error updating todo:', error);
       throw new Error('タスクの更新に失敗しました');
@@ -121,12 +211,40 @@ export class AnalysisService {
       console.log('Saving analysis for user:', userId);
       console.log('Extracted data:', extractedData);
 
+      // 画像データURLのサイズをチェック
+      let finalImageUrl: string | undefined;
+      if (imageDataUrl) {
+        const imageSizeBytes = new Blob([imageDataUrl]).size;
+        console.log('Image data size:', imageSizeBytes, 'bytes');
+        
+        // 開発環境では画像保存をスキップ
+        if (import.meta.env.DEV) {
+          console.log('Development mode: skipping image upload');
+          finalImageUrl = undefined;
+        } else {
+          // 本番環境でのみ画像処理を実行
+          if (imageSizeBytes < 500000) {
+            console.log('Image size is small, saving directly to Firestore');
+            finalImageUrl = imageDataUrl;
+          } else {
+            try {
+              console.log('Image size is large, uploading to Storage...');
+              finalImageUrl = await this.uploadImageDataUrl(userId, imageDataUrl);
+              console.log('Image uploaded successfully:', finalImageUrl);
+            } catch (storageError) {
+              console.warn('Storage upload failed, skipping image:', storageError);
+              finalImageUrl = undefined;
+            }
+          }
+        }
+      }
+
       const analysisRecord: Omit<AnalysisRecord, 'id'> = {
         userId,
         originalText,
         extractedData,
         selectedChildIds,
-        imageDataUrl,
+        ...(finalImageUrl && { imageDataUrl: finalImageUrl }), // undefinedの場合はフィールドを省略
         createdAt: new Date(),
         updatedAt: new Date(),
         isPinned: false,
@@ -134,11 +252,13 @@ export class AnalysisService {
       };
 
       console.log('Creating analysis document...');
-      const docRef = await addDoc(collection(db, 'analyses'), {
+      const cleanedRecord = this.removeUndefinedFields({
         ...analysisRecord,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       });
+      
+      const docRef = await addDoc(collection(db, 'analyses'), cleanedRecord);
 
       console.log('Analysis document created with ID:', docRef.id);
 
@@ -156,6 +276,17 @@ export class AnalysisService {
         console.log('Notifications generated successfully');
       } catch (notificationError) {
         console.warn('Error generating notifications (continuing):', notificationError);
+      }
+
+      // ダッシュボード更新イベントを発火
+      try {
+        const event = new CustomEvent('analysisComplete', {
+          detail: { analysisId: docRef.id, userId }
+        });
+        window.dispatchEvent(event);
+        console.log('Analysis complete event dispatched');
+      } catch (eventError) {
+        console.warn('Error dispatching analysis complete event:', eventError);
       }
 
       return docRef.id;
@@ -178,20 +309,53 @@ export class AnalysisService {
       const q = query(
         collection(db, 'analyses'),
         where('userId', '==', userId),
-        orderBy('createdAt', 'desc'),
         limit(limitCount)
       );
 
       const querySnapshot = await getDocs(q);
       
-      return querySnapshot.docs.map(doc => ({
+      const analyses = querySnapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data(),
         createdAt: doc.data().createdAt?.toDate() || new Date(),
         updatedAt: doc.data().updatedAt?.toDate() || new Date(),
       })) as AnalysisRecord[];
+
+      // createdAt順にソート（新しい順）
+      analyses.sort((a, b) => {
+        const timeA = a.createdAt?.getTime() || 0;
+        const timeB = b.createdAt?.getTime() || 0;
+        return timeB - timeA;
+      });
+
+      return analyses;
     } catch (error) {
       console.error('Error fetching user analyses:', error);
+      throw new Error('解析結果の取得に失敗しました');
+    }
+  }
+
+  /**
+   * 解析結果をIDで取得
+   */
+  static async getAnalysisById(analysisId: string): Promise<AnalysisRecord | null> {
+    try {
+      const docRef = doc(db, 'analyses', analysisId);
+      const docSnap = await getDoc(docRef);
+      
+      if (!docSnap.exists()) {
+        return null;
+      }
+      
+      const data = docSnap.data();
+      return {
+        id: docSnap.id,
+        ...data,
+        createdAt: data.createdAt?.toDate() || new Date(),
+        updatedAt: data.updatedAt?.toDate() || new Date(),
+      } as AnalysisRecord;
+    } catch (error) {
+      console.error('Error fetching analysis by ID:', error);
       throw new Error('解析結果の取得に失敗しました');
     }
   }
@@ -349,30 +513,44 @@ export class AnalysisService {
    */
   static async getUserTodos(userId: string, includeCompleted: boolean = false): Promise<TodoItem[]> {
     try {
-      let q = query(
+      // 最もシンプルなクエリでTODOを取得
+      const q = query(
         collection(db, 'todos'),
         where('userId', '==', userId),
-        orderBy('dueDate', 'asc')
+        limit(100)
       );
-
-      if (!includeCompleted) {
-        q = query(
-          collection(db, 'todos'),
-          where('userId', '==', userId),
-          where('completed', '==', false),
-          orderBy('dueDate', 'asc')
-        );
-      }
 
       const querySnapshot = await getDocs(q);
       
-      return querySnapshot.docs.map(doc => ({
+      let todos = querySnapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data(),
         dueDate: doc.data().dueDate?.toDate() || undefined,
         createdAt: doc.data().createdAt?.toDate() || new Date(),
         updatedAt: doc.data().updatedAt?.toDate() || new Date(),
       })) as TodoItem[];
+
+      // 完了済みを除外する場合はクライアント側でフィルタリング
+      if (!includeCompleted) {
+        todos = todos.filter(todo => !todo.completed);
+      }
+
+      // createdAt順にソート（新しい順）
+      todos.sort((a, b) => {
+        const timeA = a.createdAt?.getTime() || 0;
+        const timeB = b.createdAt?.getTime() || 0;
+        return timeB - timeA;
+      });
+
+      // dueDate順に再ソート（dueDate未設定は最後）
+      todos.sort((a, b) => {
+        if (!a.dueDate && !b.dueDate) return 0;
+        if (!a.dueDate) return 1;
+        if (!b.dueDate) return -1;
+        return a.dueDate.getTime() - b.dueDate.getTime();
+      });
+
+      return todos;
     } catch (error) {
       console.error('Error fetching todos:', error);
       throw new Error('TODOリストの取得に失敗しました');
@@ -400,31 +578,34 @@ export class AnalysisService {
    */
   static async getUserNotifications(userId: string, unreadOnly: boolean = false): Promise<NotificationItem[]> {
     try {
-      let q = query(
+      // 最もシンプルなクエリで通知を取得
+      const q = query(
         collection(db, 'notifications'),
         where('userId', '==', userId),
-        orderBy('createdAt', 'desc'),
-        limit(50)
+        limit(100)
       );
 
-      if (unreadOnly) {
-        q = query(
-          collection(db, 'notifications'),
-          where('userId', '==', userId),
-          where('isRead', '==', false),
-          orderBy('createdAt', 'desc'),
-          limit(50)
-        );
-      }
-
       const querySnapshot = await getDocs(q);
-      
-      return querySnapshot.docs.map(doc => ({
+      let notifications = querySnapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data(),
         scheduledFor: doc.data().scheduledFor?.toDate() || undefined,
         createdAt: doc.data().createdAt?.toDate() || new Date(),
       })) as NotificationItem[];
+
+      // 未読のみが必要な場合はクライアント側でフィルタリング
+      if (unreadOnly) {
+        notifications = notifications.filter(notification => !notification.isRead);
+      }
+
+      // createdAt順にソート（新しい順）
+      notifications.sort((a, b) => {
+        const timeA = a.createdAt?.getTime() || 0;
+        const timeB = b.createdAt?.getTime() || 0;
+        return timeB - timeA;
+      });
+
+      return notifications;
     } catch (error) {
       console.error('Error fetching notifications:', error);
       throw new Error('通知の取得に失敗しました');
