@@ -53,9 +53,24 @@ const SettingsPage: React.FC = () => {
 
   // プラン制限定義
   const planLimits = {
-    free: { maxMembers: 3, maxChildren: 2 },
-    standard: { maxMembers: 6, maxChildren: 4 },
-    pro: { maxMembers: 10, maxChildren: 8 }
+    free: { 
+      maxMembers: 1, // 無料プランは家族共有なし（本人のみ）
+      maxChildren: 0, // 無料プランは子ども登録なし
+      monthlyLimit: 4,
+      dataRetentionHours: 24
+    },
+    standard: { 
+      maxMembers: 5, // 5人まで
+      maxChildren: 4,
+      monthlyLimit: 30,
+      dataRetentionDays: 28 // 4週間
+    },
+    pro: { 
+      maxMembers: 8, // 8人まで
+      maxChildren: 6,
+      monthlyLimit: 200,
+      dataRetentionMonths: 6 // 6ヶ月
+    }
   };
 
   const currentPlan = userProfile?.planType || 'free';
@@ -508,15 +523,33 @@ const SettingsPage: React.FC = () => {
           </div>
           
           {/* プラン制限通知 */}
-          <div className="bg-blue-50 border border-blue-200 p-6 rounded-xl">
-            <h3 className="text-lg font-bold text-blue-800 mb-2">家族管理機能（テスト版）</h3>
-            <p className="text-blue-700 mb-4">
-              通常はスタンダードプラン以上が必要ですが、テスト用に利用できます。
-            </p>
-          </div>
+          {currentPlan === 'free' ? (
+            <div className="bg-orange-50 border border-orange-200 p-6 rounded-xl">
+              <h3 className="text-lg font-bold text-orange-800 mb-2">家族管理機能（有料プラン限定）</h3>
+              <p className="text-orange-700 mb-4">
+                家族管理機能は<strong>スタンダードプラン</strong>以上でご利用いただけます。
+                プランをアップグレードして、家族みんなでおたよりやTODOを共有しましょう！
+              </p>
+              <div className="flex gap-3">
+                <Button
+                  variant="primary"
+                  onClick={() => setActiveTab('account')}
+                >
+                  プランをアップグレード
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="bg-blue-50 border border-blue-200 p-6 rounded-xl">
+              <h3 className="text-lg font-bold text-blue-800 mb-2">家族管理機能</h3>
+              <p className="text-blue-700 mb-4">
+                家族メンバー最大{currentLimits.maxMembers}人、お子様最大{currentLimits.maxChildren}人まで招待できます。
+              </p>
+            </div>
+          )}
 
-          {/* 家族作成ボタン（テスト用） */}
-          {!hasFamily && (
+          {/* 家族作成ボタン */}
+          {!hasFamily && currentPlan !== 'free' && (
             <div className="bg-white p-6 rounded-xl shadow-md">
               <h2 className="text-xl font-bold text-gray-800 mb-4">家族の管理</h2>
               <p className="text-gray-600 mb-6">
@@ -528,13 +561,13 @@ const SettingsPage: React.FC = () => {
                 isLoading={isLoading}
                 disabled={isLoading}
               >
-                家族グループを作成（テスト）
+                家族グループを作成
               </Button>
             </div>
           )}
 
-          {/* 家族が作成された場合の表示（テスト用） */}
-          {hasFamily && family && (
+          {/* 家族が作成された場合の表示 */}
+          {hasFamily && family && currentPlan !== 'free' && (
             <div className="space-y-6">
               {/* 家族メンバー */}
               <div className="bg-white p-6 rounded-xl shadow-md">
@@ -1051,29 +1084,29 @@ const SettingsPage: React.FC = () => {
         case 'free':
           return [
             'AI解析：月4回まで',
-            '保存・履歴：24時間で自動削除',
-            '家族と共有：なし',
+            'TODOリスト・解析結果：24時間で自動削除',
+            '家族と共有：なし（本人のみ）',
             '通知・カレンダー：なし'
           ];
         case 'standard':
           return [
             'AI解析：月30回まで',
-            '保存・履歴：4週間保存',
+            'TODOリスト・解析結果：4週間保存',
             '家族と共有：5人まで',
             'SNS通知・カレンダー出力・自動同期'
           ];
         case 'pro':
           return [
             'AI解析：月200回まで',
-            '保存・履歴：6ヶ月保存',
+            'TODOリスト・解析結果：6ヶ月保存',
             '家族と共有：8人まで',
             'SNS通知・カレンダー出力・自動同期'
           ];
         default:
           return [
             'AI解析：月4回まで',
-            '保存・履歴：24時間で自動削除',
-            '家族と共有：なし',
+            'TODOリスト・解析結果：24時間で自動削除',
+            '家族と共有：なし（本人のみ）',
             '通知・カレンダー：なし'
           ];
       }
@@ -1095,10 +1128,16 @@ const SettingsPage: React.FC = () => {
                 <p className="text-sm text-gray-600">現在のご利用プラン</p>
               </div>
               <div className="text-right">
-                <div className="text-2xl font-bold text-orange-600">
-                  {userProfile?.planType === 'free' ? '¥0' : userProfile?.planType === 'standard' ? '¥100' : '¥500'}
-                </div>
-                <div className="text-sm text-gray-600">/月</div>
+                {userProfile?.planType === 'free' ? (
+                  <div className="text-2xl font-bold text-green-600">無料</div>
+                ) : (
+                  <>
+                    <div className="text-2xl font-bold text-orange-600">
+                      {userProfile?.planType === 'standard' ? '¥100' : '¥500'}
+                    </div>
+                    <div className="text-sm text-gray-600">/月</div>
+                  </>
+                )}
               </div>
             </div>
             
@@ -1106,13 +1145,23 @@ const SettingsPage: React.FC = () => {
             <div className="mb-4">
               <div className="flex justify-between text-sm mb-2">
                 <span>今月の利用状況</span>
-                <span>{userProfile?.currentMonthUsage || 0} / {userProfile?.monthlyLimit || 1} 回</span>
+                <span>
+                  {userProfile?.currentMonthUsage || 0} / {
+                    userProfile?.monthlyLimit || 
+                    (userProfile?.planType === 'free' ? 4 : 
+                     userProfile?.planType === 'standard' ? 30 : 200)
+                  } 回
+                </span>
               </div>
               <div className="w-full bg-gray-200 rounded-full h-2">
                 <div 
                   className="bg-orange-500 h-2 rounded-full" 
                   style={{
-                    width: `${Math.min(((userProfile?.currentMonthUsage || 0) / (userProfile?.monthlyLimit || 1)) * 100, 100)}%`
+                    width: `${Math.min(((userProfile?.currentMonthUsage || 0) / (
+                      userProfile?.monthlyLimit || 
+                      (userProfile?.planType === 'free' ? 4 : 
+                       userProfile?.planType === 'standard' ? 30 : 200)
+                    )) * 100, 100)}%`
                   }}
                 ></div>
               </div>
@@ -1182,14 +1231,14 @@ const SettingsPage: React.FC = () => {
                     <td className="border border-gray-300 p-3 text-center">200回まで</td>
                   </tr>
                   <tr>
-                    <td className="border border-gray-300 p-3">保存・履歴</td>
+                    <td className="border border-gray-300 p-3">TODOリスト・解析結果の保存期間</td>
                     <td className="border border-gray-300 p-3 text-center">24時間で自動削除</td>
                     <td className="border border-gray-300 p-3 text-center">4週間保存</td>
                     <td className="border border-gray-300 p-3 text-center">6ヶ月保存</td>
                   </tr>
                   <tr>
                     <td className="border border-gray-300 p-3">家族共有</td>
-                    <td className="border border-gray-300 p-3 text-center">なし</td>
+                    <td className="border border-gray-300 p-3 text-center">なし（本人のみ）</td>
                     <td className="border border-gray-300 p-3 text-center">5人まで</td>
                     <td className="border border-gray-300 p-3 text-center">8人まで</td>
                   </tr>

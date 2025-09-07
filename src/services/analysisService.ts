@@ -14,6 +14,7 @@ import {
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { ClassNewsletterSchema } from '../types';
+import { UserService } from './userService';
 
 export interface AnalysisRecord {
   id?: string;
@@ -114,6 +115,9 @@ export class AnalysisService {
     imageDataUrl?: string
   ): Promise<string> {
     try {
+      // プラン制限チェックと古いデータ削除
+      await this.validateAndCleanupBeforeAdd(userId);
+
       console.log('Saving analysis for user:', userId);
       console.log('Extracted data:', extractedData);
 
@@ -440,5 +444,118 @@ export class AnalysisService {
       console.error('Error marking notification as read:', error);
       throw new Error('通知の既読処理に失敗しました');
     }
+  }
+
+  /**
+   * プラン制限チェック - 月間利用回数
+   */
+  static async checkMonthlyUsageLimit(userId: string): Promise<{ canUse: boolean; remainingUsage: number }> {
+    try {
+      const userProfile = await UserService.getUserProfile(userId);
+      if (!userProfile) {
+        throw new Error('ユーザープロフィールが見つかりません');
+      }
+
+      const remainingUsage = userProfile.monthlyLimit - userProfile.currentMonthUsage;
+      return {
+        canUse: remainingUsage > 0,
+        remainingUsage: Math.max(0, remainingUsage)
+      };
+    } catch (error) {
+      console.error('Error checking usage limit:', error);
+      throw new Error('利用制限の確認に失敗しました');
+    }
+  }
+
+  /**
+   * プラン制限に基づくデータ自動削除
+   */
+  static async cleanupOldDataByPlan(userId: string): Promise<void> {
+    try {
+      const userProfile = await UserService.getUserProfile(userId);
+      if (!userProfile) return;
+
+      const now = new Date();
+      let cutoffDate: Date;
+
+      // プランに基づく保存期間設定
+      switch (userProfile.planType) {
+        case 'free':
+          // 24時間前
+          cutoffDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+          break;
+        case 'standard':
+          // 4週間前（28日）
+          cutoffDate = new Date(now.getTime() - 28 * 24 * 60 * 60 * 1000);
+          break;
+        case 'pro':
+          // 6ヶ月前（180日）
+          cutoffDate = new Date(now.getTime() - 180 * 24 * 60 * 60 * 1000);
+          break;
+        default:
+          // デフォルトは無料プラン
+          cutoffDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      }
+
+      // 古い解析結果を削除
+      const analysisQuery = query(
+        collection(db, 'analyses'),
+        where('userId', '==', userId),
+        where('createdAt', '<', cutoffDate)
+      );
+      const analysisSnapshot = await getDocs(analysisQuery);
+      
+      // 古いTODOを削除
+      const todoQuery = query(
+        collection(db, 'todos'),
+        where('userId', '==', userId),
+        where('createdAt', '<', cutoffDate)
+      );
+      const todoSnapshot = await getDocs(todoQuery);
+
+      // 古い通知を削除
+      const notificationQuery = query(
+        collection(db, 'notifications'),
+        where('userId', '==', userId),
+        where('createdAt', '<', cutoffDate)
+      );
+      const notificationSnapshot = await getDocs(notificationQuery);
+
+      // バッチ削除実行
+      const deletePromises: Promise<void>[] = [];
+      
+      analysisSnapshot.docs.forEach(docSnapshot => {
+        deletePromises.push(deleteDoc(docSnapshot.ref));
+      });
+      
+      todoSnapshot.docs.forEach(docSnapshot => {
+        deletePromises.push(deleteDoc(docSnapshot.ref));
+      });
+      
+      notificationSnapshot.docs.forEach(docSnapshot => {
+        deletePromises.push(deleteDoc(docSnapshot.ref));
+      });
+
+      await Promise.all(deletePromises);
+
+      console.log(`Cleaned up old data for user ${userId}. Plan: ${userProfile.planType}, Cutoff: ${cutoffDate}`);
+    } catch (error) {
+      console.error('Error cleaning up old data:', error);
+      // エラーが発生してもアプリケーションの動作を止めない
+    }
+  }
+
+  /**
+   * データ追加前の制限チェックと古いデータの削除
+   */
+  static async validateAndCleanupBeforeAdd(userId: string): Promise<void> {
+    // 月間利用制限チェック
+    const { canUse } = await this.checkMonthlyUsageLimit(userId);
+    if (!canUse) {
+      throw new Error('今月の利用上限に達しています。プランをアップグレードするか、来月まで待ってください。');
+    }
+
+    // 古いデータを削除
+    await this.cleanupOldDataByPlan(userId);
   }
 }

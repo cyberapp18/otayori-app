@@ -57,7 +57,7 @@ export class UserService {
       
       // プラン情報（初期は無料）
       planType: 'free',
-      monthlyLimit: 5,
+      monthlyLimit: 4, // 無料プランは4回まで
       
       // 使用量（初期化）
       currentMonthUsage: 0,
